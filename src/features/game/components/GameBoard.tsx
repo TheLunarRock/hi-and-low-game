@@ -84,7 +84,7 @@ export function GameBoard({ isSecretActivated = false }: GameBoardProps): React.
             toastState === 'visible' ? 'translate-x-0' : 'translate-x-[calc(100%+1rem)]'
           }`}
         >
-          🔥 きょうもハイスコアを更新しよう！
+          通知：🔥 きょうもハイスコアを更新しよう！
         </div>
       )}
 
