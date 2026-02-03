@@ -1,9 +1,13 @@
 'use client'
 
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
-import { INITIAL_COINS, STORAGE_KEY, SUITS } from '../constants'
+import { ANIMATION_DELAY, INITIAL_COINS, STORAGE_KEY, SUITS } from '../constants'
 import type { Card, CardValue, GameState, Guess, Suit } from '../types'
+
+// ============================================
+// ユーティリティ関数
+// ============================================
 
 /**
  * ランダムなカードを生成
@@ -18,42 +22,36 @@ function generateRandomCard(): Card {
 }
 
 /**
- * ローカルストレージからハイスコアを取得
+ * 安全なlocalStorage操作（エラーハンドリング付き）
+ * プライベートブラウジングやQuota超過時の例外を処理
  */
-function getStoredHighScore(): number {
-  if (typeof window === 'undefined') return 0
-  const stored = localStorage.getItem(STORAGE_KEY.HIGH_SCORE)
-  if (stored === null) return 0
-  const parsed = parseInt(stored, 10)
-  return isNaN(parsed) ? 0 : parsed
+const safeStorage = {
+  get<T>(key: string, defaultValue: T): T {
+    if (typeof window === 'undefined') return defaultValue
+    try {
+      const stored = localStorage.getItem(key)
+      if (stored === null) return defaultValue
+      const parsed = JSON.parse(stored) as unknown
+      return typeof parsed === typeof defaultValue ? (parsed as T) : defaultValue
+    } catch {
+      // localStorage無効時やパースエラー時はデフォルト値を返す
+      return defaultValue
+    }
+  },
+
+  set<T>(key: string, value: T): void {
+    if (typeof window === 'undefined') return
+    try {
+      localStorage.setItem(key, JSON.stringify(value))
+    } catch {
+      // Quota超過時等は静かに失敗（ゲームの続行を優先）
+    }
+  },
 }
 
-/**
- * ハイスコアをローカルストレージに保存
- */
-function saveHighScore(score: number): void {
-  if (typeof window === 'undefined') return
-  localStorage.setItem(STORAGE_KEY.HIGH_SCORE, String(score))
-}
-
-/**
- * ローカルストレージからコインを取得
- */
-function getStoredCoins(): number {
-  if (typeof window === 'undefined') return INITIAL_COINS
-  const stored = localStorage.getItem(STORAGE_KEY.COINS)
-  if (stored === null) return INITIAL_COINS
-  const parsed = parseInt(stored, 10)
-  return isNaN(parsed) ? INITIAL_COINS : parsed
-}
-
-/**
- * コインをローカルストレージに保存
- */
-function saveCoins(coins: number): void {
-  if (typeof window === 'undefined') return
-  localStorage.setItem(STORAGE_KEY.COINS, String(coins))
-}
+// ============================================
+// カスタムフック
+// ============================================
 
 /**
  * ゲームロジックフック
@@ -70,20 +68,73 @@ export function useGame() {
   const [isRevealing, setIsRevealing] = useState(false)
   const [isInitialized, setIsInitialized] = useState(false)
 
+  // タイマーIDを保持（クリーンアップ用）
+  const revealTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const transitionTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  // マウント状態を追跡（アンマウント後のstate更新を防止）
+  const isMountedRef = useRef(true)
+
+  /**
+   * 全タイマーをクリア
+   */
+  const clearAllTimers = useCallback(() => {
+    if (revealTimerRef.current !== null) {
+      clearTimeout(revealTimerRef.current)
+      revealTimerRef.current = null
+    }
+    if (transitionTimerRef.current !== null) {
+      clearTimeout(transitionTimerRef.current)
+      transitionTimerRef.current = null
+    }
+  }, [])
+
+  /**
+   * 次のラウンドへ遷移（共通処理をDRY化）
+   */
+  const transitionToNextRound = useCallback((newCard: Card) => {
+    transitionTimerRef.current = setTimeout(() => {
+      if (!isMountedRef.current) return
+      setCurrentCard(newCard)
+      setNextCard(null)
+      setGameState('playing')
+      setIsRevealing(false)
+    }, ANIMATION_DELAY.NEXT_ROUND)
+  }, [])
+
+  /**
+   * ゲーム状態を初期化（共通処理をDRY化）
+   */
+  const initializeGameState = useCallback(() => {
+    clearAllTimers()
+    setCurrentCard(generateRandomCard())
+    setNextCard(null)
+    setGameState('playing')
+    setStreak(0)
+    setIsRevealing(false)
+  }, [clearAllTimers])
+
   // クライアント側でのみ初期化（Hydration mismatch回避）
   useEffect(() => {
+    isMountedRef.current = true
     setCurrentCard(generateRandomCard())
-    setHighScore(getStoredHighScore())
-    setCoins(getStoredCoins())
+    setHighScore(safeStorage.get(STORAGE_KEY.HIGH_SCORE, 0))
+    setCoins(safeStorage.get(STORAGE_KEY.COINS, INITIAL_COINS))
     setIsInitialized(true)
-  }, [])
+
+    // クリーンアップ: コンポーネントアンマウント時
+    return () => {
+      isMountedRef.current = false
+      clearAllTimers()
+    }
+  }, [clearAllTimers])
 
   /**
    * 予想を行う
    */
   const makeGuess = useCallback(
     (guess: Guess): void => {
-      // 初期化前、ゲーム中でない、またはコイン不足の場合は何もしない
+      // ガード条件: 初期化前、ゲーム中でない、判定中、コイン不足
       if (currentCard === null || gameState !== 'playing' || isRevealing || coins <= 0) return
 
       // 1コイン消費
@@ -95,7 +146,9 @@ export function useGame() {
       setIsRevealing(true)
 
       // 結果判定を遅延させてアニメーション効果
-      setTimeout(() => {
+      revealTimerRef.current = setTimeout(() => {
+        if (!isMountedRef.current) return
+
         const isDraw = newCard.value === currentCard.value
         const isWin =
           (guess === 'high' && newCard.value > currentCard.value) ||
@@ -105,79 +158,52 @@ export function useGame() {
           // ドロー：コインを返却
           const refundedCoins = newCoins + 1
           setCoins(refundedCoins)
-          saveCoins(refundedCoins)
+          safeStorage.set(STORAGE_KEY.COINS, refundedCoins)
           setGameState('draw')
-
-          // 次のラウンドへ自動遷移
-          setTimeout(() => {
-            setCurrentCard(newCard)
-            setNextCard(null)
-            setGameState('playing')
-            setIsRevealing(false)
-          }, 1000)
+          transitionToNextRound(newCard)
         } else if (isWin) {
-          // 勝利：連勝数+1のコインを獲得
+          // 勝利：連勝数分のコインを獲得
           const newStreak = streak + 1
-          const reward = newStreak
-          const wonCoins = newCoins + reward
+          const wonCoins = newCoins + newStreak
           setStreak(newStreak)
           setCoins(wonCoins)
-          saveCoins(wonCoins)
+          safeStorage.set(STORAGE_KEY.COINS, wonCoins)
           setGameState('won')
 
           // ハイスコア更新
           if (newStreak > highScore) {
             setHighScore(newStreak)
-            saveHighScore(newStreak)
+            safeStorage.set(STORAGE_KEY.HIGH_SCORE, newStreak)
           }
 
-          // 次のラウンドへ自動遷移
-          setTimeout(() => {
-            setCurrentCard(newCard)
-            setNextCard(null)
-            setGameState('playing')
-            setIsRevealing(false)
-          }, 1000)
+          transitionToNextRound(newCard)
         } else {
           // 敗北：連勝リセット、コインは既に消費済み
-          saveCoins(newCoins)
+          safeStorage.set(STORAGE_KEY.COINS, newCoins)
           setStreak(0)
-
-          if (newCoins <= 0) {
-            setGameState('gameover')
-          } else {
-            setGameState('lost')
-          }
+          setGameState(newCoins <= 0 ? 'gameover' : 'lost')
           setIsRevealing(false)
         }
-      }, 500)
+      }, ANIMATION_DELAY.REVEAL)
     },
-    [coins, currentCard, gameState, highScore, isRevealing, streak]
+    [coins, currentCard, gameState, highScore, isRevealing, streak, transitionToNextRound]
   )
 
   /**
    * ゲームをリセット（敗北後に続ける）
    */
   const resetGame = useCallback((): void => {
-    setCurrentCard(generateRandomCard())
-    setNextCard(null)
-    setGameState('playing')
-    setStreak(0)
-    setIsRevealing(false)
-  }, [])
+    initializeGameState()
+  }, [initializeGameState])
 
   /**
    * ゲームを完全にリセット（コインも初期化）
    */
   const fullReset = useCallback((): void => {
-    setCurrentCard(generateRandomCard())
-    setNextCard(null)
-    setGameState('playing')
-    setStreak(0)
+    initializeGameState()
     setCoins(INITIAL_COINS)
-    saveCoins(INITIAL_COINS)
-    setIsRevealing(false)
-  }, [])
+    safeStorage.set(STORAGE_KEY.COINS, INITIAL_COINS)
+  }, [initializeGameState])
 
   return useMemo(
     () => ({

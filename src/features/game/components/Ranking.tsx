@@ -11,8 +11,10 @@ interface RankingProps {
 
 /**
  * ランクに応じたアイコンを取得
+ * @param rank - 1以上の順位
  */
 function getRankIcon(rank: number): string {
+  if (rank <= 0) return '-'
   if (rank === 1) return '🥇'
   if (rank === 2) return '🥈'
   if (rank === 3) return '🥉'

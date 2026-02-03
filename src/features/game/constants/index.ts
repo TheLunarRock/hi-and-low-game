@@ -2,7 +2,7 @@
  * Hi & Low ゲームの定数
  */
 
-import type { RankingEntry, Suit } from '../types'
+import type { CardValue, RankingEntry, Suit } from '../types'
 
 /**
  * スート一覧
@@ -30,9 +30,9 @@ export const SUIT_COLOR: Record<Suit, string> = {
 } as const
 
 /**
- * カード値の表示用文字
+ * カード値の表示用文字（型安全性向上: number → CardValue）
  */
-export const VALUE_DISPLAY: Record<number, string> = {
+export const VALUE_DISPLAY: Record<CardValue, string> = {
   1: 'A',
   2: '2',
   3: '3',
@@ -63,6 +63,16 @@ export const RANKING_DATA: readonly RankingEntry[] = [
  * 初期コイン数
  */
 export const INITIAL_COINS = 10
+
+/**
+ * アニメーション遅延時間（ミリ秒）
+ */
+export const ANIMATION_DELAY = {
+  /** カード判定までの遅延 */
+  REVEAL: 500,
+  /** 次のラウンドへの遷移遅延 */
+  NEXT_ROUND: 1000,
+} as const
 
 /**
  * ローカルストレージキー
