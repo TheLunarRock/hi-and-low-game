@@ -86,14 +86,6 @@ export function GameBoard({ isSecretActivated = false }: GameBoardProps): React.
         />
       </div>
 
-      {/* ルール説明 */}
-      <div className="mb-8 text-center text-sm text-green-200">
-        <p>次のカードが現在のカードより「高い」か「低い」かを予想しよう！</p>
-        <p className="mt-1 text-xs text-green-300">
-          1ゲーム1コイン消費 | 勝利: 連勝数分のコイン獲得 | ドロー: コイン返却
-        </p>
-      </div>
-
       {/* ランキング */}
       <div className="mx-auto w-full max-w-sm">
         <Ranking entries={RANKING_DATA} isSecretActivated={isSecretActivated} />
