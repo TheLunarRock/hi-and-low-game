@@ -41,16 +41,20 @@ function saveHighScore(score: number): void {
  * @internal このフックは内部使用のみ
  */
 export function useGame() {
-  const [currentCard, setCurrentCard] = useState<Card>(() => generateRandomCard())
+  // SSR時は固定値、クライアントでuseEffectで初期化
+  const [currentCard, setCurrentCard] = useState<Card | null>(null)
   const [nextCard, setNextCard] = useState<Card | null>(null)
   const [gameState, setGameState] = useState<GameState>('playing')
   const [streak, setStreak] = useState(0)
   const [highScore, setHighScore] = useState(0)
   const [isRevealing, setIsRevealing] = useState(false)
+  const [isInitialized, setIsInitialized] = useState(false)
 
-  // 初回マウント時にハイスコアを読み込む
+  // クライアント側でのみ初期化（Hydration mismatch回避）
   useEffect(() => {
+    setCurrentCard(generateRandomCard())
     setHighScore(getStoredHighScore())
+    setIsInitialized(true)
   }, [])
 
   /**
@@ -58,7 +62,8 @@ export function useGame() {
    */
   const makeGuess = useCallback(
     (guess: Guess): void => {
-      if (gameState !== 'playing' || isRevealing) return
+      // 初期化前またはゲーム中でない場合は何もしない
+      if (currentCard === null || gameState !== 'playing' || isRevealing) return
 
       const newCard = generateRandomCard()
       setNextCard(newCard)
@@ -116,9 +121,20 @@ export function useGame() {
       streak,
       highScore,
       isRevealing,
+      isInitialized,
       makeGuess,
       resetGame,
     }),
-    [currentCard, nextCard, gameState, streak, highScore, isRevealing, makeGuess, resetGame]
+    [
+      currentCard,
+      nextCard,
+      gameState,
+      streak,
+      highScore,
+      isRevealing,
+      isInitialized,
+      makeGuess,
+      resetGame,
+    ]
   )
 }

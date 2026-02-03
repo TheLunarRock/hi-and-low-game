@@ -14,8 +14,27 @@ interface GameBoardProps {
  * ゲームボードコンポーネント
  */
 export function GameBoard({ isSecretActivated = false }: GameBoardProps): React.JSX.Element {
-  const { currentCard, nextCard, gameState, streak, highScore, isRevealing, makeGuess, resetGame } =
-    useGame()
+  const {
+    currentCard,
+    nextCard,
+    gameState,
+    streak,
+    highScore,
+    isRevealing,
+    isInitialized,
+    makeGuess,
+    resetGame,
+  } = useGame()
+
+  // SSR/Hydration時はローディング表示（Math.random()の不一致を回避）
+  if (!isInitialized) {
+    return (
+      <div className="flex min-h-screen flex-col items-center justify-center bg-gradient-to-b from-green-800 to-green-900">
+        <span className="text-4xl">🃏</span>
+        <p className="mt-4 text-xl text-white">Loading...</p>
+      </div>
+    )
+  }
 
   return (
     <div className="flex min-h-screen flex-col bg-gradient-to-b from-green-800 to-green-900 px-4 py-8">
@@ -39,7 +58,7 @@ export function GameBoard({ isSecretActivated = false }: GameBoardProps): React.
 
       {/* カード表示エリア */}
       <div className="mb-8 flex items-center justify-center gap-4">
-        <Card card={currentCard} />
+        <Card card={currentCard} isHidden={currentCard === null} />
         <div className="flex flex-col items-center">
           <span className="text-2xl text-white">→</span>
         </div>
