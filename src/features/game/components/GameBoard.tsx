@@ -31,16 +31,32 @@ export function GameBoard({ isSecretActivated = false }: GameBoardProps): React.
     fullReset,
   } = useGame()
 
-  // トースト通知の表示状態
-  const [showToast, setShowToast] = useState(false)
+  // トースト通知の表示状態: 'hidden' | 'entering' | 'visible' | 'exiting'
+  const [toastState, setToastState] = useState<'hidden' | 'entering' | 'visible' | 'exiting'>(
+    'hidden'
+  )
 
   // ゲーム初期化時にトースト表示
   useEffect(() => {
     if (!isInitialized) return
 
-    setShowToast(true)
-    const timer = setTimeout(() => setShowToast(false), 3000)
-    return () => clearTimeout(timer)
+    // スライドイン開始
+    setToastState('entering')
+
+    // アニメーション後にvisibleに
+    const enterTimer = setTimeout(() => setToastState('visible'), 50)
+
+    // 3秒後にスライドアウト開始
+    const exitTimer = setTimeout(() => setToastState('exiting'), 3000)
+
+    // アニメーション後に非表示
+    const hideTimer = setTimeout(() => setToastState('hidden'), 3500)
+
+    return () => {
+      clearTimeout(enterTimer)
+      clearTimeout(exitTimer)
+      clearTimeout(hideTimer)
+    }
   }, [isInitialized])
 
   // SSR/Hydration時はローディング表示（Math.random()の不一致を回避）
@@ -61,12 +77,14 @@ export function GameBoard({ isSecretActivated = false }: GameBoardProps): React.
         <h1 className="text-3xl font-bold text-white">Hi & Low</h1>
       </header>
 
-      {/* トースト通知 */}
-      {showToast && (
-        <div className="mb-4 flex justify-center">
-          <div className="animate-pulse rounded-lg bg-yellow-500/90 px-6 py-3 text-center font-bold text-white shadow-lg">
-            🔥 きょうもハイスコアを更新しよう！
-          </div>
+      {/* トースト通知（オーバーレイ） */}
+      {toastState !== 'hidden' && (
+        <div
+          className={`fixed right-4 top-4 z-50 transform rounded-lg bg-yellow-500 px-6 py-3 font-bold text-white shadow-lg transition-transform duration-500 ease-out ${
+            toastState === 'visible' ? 'translate-x-0' : 'translate-x-[calc(100%+1rem)]'
+          }`}
+        >
+          🔥 きょうもハイスコアを更新しよう！
         </div>
       )}
 
