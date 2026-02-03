@@ -1,5 +1,7 @@
 'use client'
 
+import { useEffect, useState } from 'react'
+
 import { RANKING_DATA } from '../constants'
 import { useGame } from '../hooks/useGame'
 import type { GameState } from '../types'
@@ -29,6 +31,18 @@ export function GameBoard({ isSecretActivated = false }: GameBoardProps): React.
     fullReset,
   } = useGame()
 
+  // トースト通知の表示状態
+  const [showToast, setShowToast] = useState(false)
+
+  // ゲーム初期化時にトースト表示
+  useEffect(() => {
+    if (!isInitialized) return
+
+    setShowToast(true)
+    const timer = setTimeout(() => setShowToast(false), 3000)
+    return () => clearTimeout(timer)
+  }, [isInitialized])
+
   // SSR/Hydration時はローディング表示（Math.random()の不一致を回避）
   if (!isInitialized) {
     return (
@@ -46,6 +60,15 @@ export function GameBoard({ isSecretActivated = false }: GameBoardProps): React.
         <span className="text-3xl">🃏</span>
         <h1 className="text-3xl font-bold text-white">Hi & Low</h1>
       </header>
+
+      {/* トースト通知 */}
+      {showToast && (
+        <div className="mb-4 flex justify-center">
+          <div className="animate-pulse rounded-lg bg-yellow-500/90 px-6 py-3 text-center font-bold text-white shadow-lg">
+            🔥 きょうもハイスコアを更新しよう！
+          </div>
+        </div>
+      )}
 
       {/* スコア表示 */}
       <div className="mb-6 flex justify-center gap-6">
