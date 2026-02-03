@@ -52,11 +52,11 @@ export const VALUE_DISPLAY: Record<number, string> = {
  * ランキングデータ
  */
 export const RANKING_DATA: readonly RankingEntry[] = [
-  { rank: 1, name: 'RIKI', score: 15 },
-  { rank: 2, name: 'Boo', score: 12 },
-  { rank: 3, name: 'Itusuki', score: 10 },
-  { rank: 4, name: 'MAIKO', score: 8 },
-  { rank: 5, name: 'DAI', score: 5 },
+  { rank: 1, name: 'RIKI', score: 47 },
+  { rank: 2, name: 'Boo', score: 40 },
+  { rank: 3, name: 'Itusuki', score: 39 },
+  { rank: 4, name: 'MAIKO', score: 33 },
+  { rank: 5, name: 'DAI', score: 31 },
 ] as const
 
 /**
