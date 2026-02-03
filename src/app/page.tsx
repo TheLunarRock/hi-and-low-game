@@ -1,7 +1,12 @@
-export default function Home() {
+'use client'
+
+import { FeatureErrorBoundary } from '@/components/ErrorBoundary'
+import { GameBoard } from '@/features/game'
+
+export default function Home(): React.JSX.Element {
   return (
-    <main className="min-h-screen flex items-center justify-center">
-      <p className="text-gray-500 font-rounded">Next.js App Running</p>
-    </main>
+    <FeatureErrorBoundary featureName="game">
+      <GameBoard />
+    </FeatureErrorBoundary>
   )
 }
