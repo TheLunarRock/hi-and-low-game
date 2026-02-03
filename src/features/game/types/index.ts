@@ -27,8 +27,13 @@ export type Guess = 'high' | 'low'
 
 /**
  * ゲームの状態
+ * - playing: プレイ中
+ * - won: 正解
+ * - lost: 不正解
+ * - draw: 引き分け（同じ数字）
+ * - gameover: コイン切れ
  */
-export type GameState = 'playing' | 'won' | 'lost'
+export type GameState = 'playing' | 'won' | 'lost' | 'draw' | 'gameover'
 
 /**
  * ゲーム結果

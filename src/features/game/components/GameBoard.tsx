@@ -2,6 +2,7 @@
 
 import { RANKING_DATA } from '../constants'
 import { useGame } from '../hooks/useGame'
+import type { GameState } from '../types'
 import { Card } from './Card'
 import { Ranking } from './Ranking'
 
@@ -20,10 +21,12 @@ export function GameBoard({ isSecretActivated = false }: GameBoardProps): React.
     gameState,
     streak,
     highScore,
+    coins,
     isRevealing,
     isInitialized,
     makeGuess,
     resetGame,
+    fullReset,
   } = useGame()
 
   // SSR/Hydration時はローディング表示（Math.random()の不一致を回避）
@@ -45,7 +48,11 @@ export function GameBoard({ isSecretActivated = false }: GameBoardProps): React.
       </header>
 
       {/* スコア表示 */}
-      <div className="mb-6 flex justify-center gap-8">
+      <div className="mb-6 flex justify-center gap-6">
+        <div className="text-center">
+          <p className="text-sm text-green-200">コイン</p>
+          <p className="text-2xl font-bold text-yellow-300">🪙 {coins}</p>
+        </div>
         <div className="text-center">
           <p className="text-sm text-green-200">連勝</p>
           <p className="text-2xl font-bold text-white">{streak}</p>
@@ -66,34 +73,27 @@ export function GameBoard({ isSecretActivated = false }: GameBoardProps): React.
       </div>
 
       {/* ゲーム状態メッセージ */}
-      {gameState === 'won' && (
-        <div className="mb-4 text-center">
-          <p className="text-xl font-bold text-yellow-400">🎉 正解！</p>
-        </div>
-      )}
-
-      {gameState === 'lost' && (
-        <div className="mb-4 text-center">
-          <p className="text-xl font-bold text-red-400">💥 残念！</p>
-          <p className="text-sm text-gray-300">連勝記録: {streak}</p>
-        </div>
-      )}
+      <GameStateMessage gameState={gameState} streak={streak} />
 
       {/* 操作ボタン */}
       <div className="mb-8 flex justify-center gap-4">
         <GameButtons
           gameState={gameState}
           isRevealing={isRevealing}
+          coins={coins}
           onHigh={() => makeGuess('high')}
           onLow={() => makeGuess('low')}
           onReset={resetGame}
+          onFullReset={fullReset}
         />
       </div>
 
       {/* ルール説明 */}
       <div className="mb-8 text-center text-sm text-green-200">
         <p>次のカードが現在のカードより「高い」か「低い」かを予想しよう！</p>
-        <p className="mt-1 text-xs text-green-300">同じ数字の場合は両方正解になります</p>
+        <p className="mt-1 text-xs text-green-300">
+          1ゲーム1コイン消費 | 勝利: 連勝数分のコイン獲得 | ドロー: コイン返却
+        </p>
       </div>
 
       {/* ランキング */}
@@ -105,22 +105,84 @@ export function GameBoard({ isSecretActivated = false }: GameBoardProps): React.
 }
 
 /**
- * ゲームボタンコンポーネント（ネストした三項演算子を解消）
+ * ゲーム状態メッセージコンポーネント
+ */
+function GameStateMessage({
+  gameState,
+  streak,
+}: {
+  readonly gameState: GameState
+  readonly streak: number
+}): React.JSX.Element | null {
+  if (gameState === 'won') {
+    return (
+      <div className="mb-4 text-center">
+        <p className="text-xl font-bold text-yellow-400">🎉 正解！ +{streak}コイン</p>
+      </div>
+    )
+  }
+
+  if (gameState === 'draw') {
+    return (
+      <div className="mb-4 text-center">
+        <p className="text-xl font-bold text-blue-300">🤝 ドロー！コイン返却</p>
+      </div>
+    )
+  }
+
+  if (gameState === 'lost') {
+    return (
+      <div className="mb-4 text-center">
+        <p className="text-xl font-bold text-red-400">💥 残念！</p>
+      </div>
+    )
+  }
+
+  if (gameState === 'gameover') {
+    return (
+      <div className="mb-4 text-center">
+        <p className="text-xl font-bold text-red-500">💀 ゲームオーバー</p>
+        <p className="text-sm text-gray-300">コインがなくなりました</p>
+      </div>
+    )
+  }
+
+  return null
+}
+
+/**
+ * ゲームボタンコンポーネント
  */
 function GameButtons({
   gameState,
   isRevealing,
+  coins,
   onHigh,
   onLow,
   onReset,
+  onFullReset,
 }: {
-  readonly gameState: 'playing' | 'won' | 'lost'
+  readonly gameState: GameState
   readonly isRevealing: boolean
+  readonly coins: number
   readonly onHigh: () => void
   readonly onLow: () => void
   readonly onReset: () => void
+  readonly onFullReset: () => void
 }): React.JSX.Element {
-  if (gameState === 'playing' && !isRevealing) {
+  if (gameState === 'gameover') {
+    return (
+      <button
+        type="button"
+        onClick={onFullReset}
+        className="rounded-lg bg-purple-500 px-8 py-4 text-xl font-bold text-white shadow-lg transition-all hover:bg-purple-600 hover:shadow-xl active:scale-95"
+      >
+        🔄 最初からやり直す
+      </button>
+    )
+  }
+
+  if (gameState === 'playing' && !isRevealing && coins > 0) {
     return (
       <>
         <button
@@ -148,7 +210,7 @@ function GameButtons({
         onClick={onReset}
         className="rounded-lg bg-yellow-500 px-8 py-4 text-xl font-bold text-white shadow-lg transition-all hover:bg-yellow-600 hover:shadow-xl active:scale-95"
       >
-        🔄 もう一度
+        🔄 続ける
       </button>
     )
   }

@@ -60,8 +60,14 @@ export const RANKING_DATA: readonly RankingEntry[] = [
 ] as const
 
 /**
+ * 初期コイン数
+ */
+export const INITIAL_COINS = 10
+
+/**
  * ローカルストレージキー
  */
 export const STORAGE_KEY = {
   HIGH_SCORE: 'hi-and-low-high-score',
+  COINS: 'hi-and-low-coins',
 } as const
