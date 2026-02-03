@@ -49,14 +49,14 @@ export const VALUE_DISPLAY: Record<number, string> = {
 } as const
 
 /**
- * ダミーランキングデータ
+ * ランキングデータ
  */
 export const RANKING_DATA: readonly RankingEntry[] = [
-  { rank: 1, name: 'Player1', score: 15 },
-  { rank: 2, name: 'Player2', score: 12 },
-  { rank: 3, name: 'Player3', score: 10 },
-  { rank: 4, name: 'Player4', score: 8 },
-  { rank: 5, name: 'Player5', score: 5 },
+  { rank: 1, name: 'RIKI', score: 15 },
+  { rank: 2, name: 'Boo', score: 12 },
+  { rank: 3, name: 'Itusuki', score: 10 },
+  { rank: 4, name: 'MAIKO', score: 8 },
+  { rank: 5, name: 'DAI', score: 5 },
 ] as const
 
 /**
