@@ -1,16 +1,36 @@
-# SuperClaude v4 Production Edition - 技術仕様書
+# Hi & Low ゲーム - 技術仕様書
 
 > このドキュメントは、アプリケーションを完全に再現するための詳細な技術仕様です。
 
 ## 1. プロジェクト概要
 
-| 項目               | 値                                               |
-| ------------------ | ------------------------------------------------ |
-| **名称**           | SuperClaude v4 Production Edition Template       |
-| **バージョン**     | 0.1.0                                            |
-| **用途**           | Claude Code開発に最適化されたNext.jsテンプレート |
-| **アーキテクチャ** | フィーチャーベース開発（厳格な境界管理）         |
-| **ライセンス**     | MIT                                              |
+| 項目               | 値                                       |
+| ------------------ | ---------------------------------------- |
+| **名称**           | Hi & Low Game                            |
+| **バージョン**     | 0.1.0                                    |
+| **用途**           | トランプを使ったハイ＆ローカードゲーム   |
+| **アーキテクチャ** | フィーチャーベース開発（厳格な境界管理） |
+| **ライセンス**     | MIT                                      |
+
+## 1.1 ゲーム概要
+
+**Hi & Low**は、次のカードが現在のカードより「高い」か「低い」かを予想するシンプルなカードゲームです。
+
+### ゲームルール
+
+1. プレイヤーは初期コイン10枚でスタート
+2. 1ゲームにつき1コインを消費
+3. 次のカードが現在のカードより高い（HIGH）か低い（LOW）かを予想
+4. 正解すると連勝数分のコインを獲得
+5. 同じ数字（ドロー）の場合はコインが返却される
+6. 不正解でも連勝がリセットされるだけで続行可能
+7. コインが0になるとゲームオーバー
+
+### カード値の順序
+
+```
+A(1) < 2 < 3 < 4 < 5 < 6 < 7 < 8 < 9 < 10 < J(11) < Q(12) < K(13)
+```
 
 ## 2. 技術スタック
 
@@ -887,7 +907,342 @@ vercel
 - Prettier統合
 - 境界違反ゼロトレランス
 
+## 16. Hi & Low ゲーム機能仕様
+
+### 16.1 フィーチャー構造
+
+```
+src/features/game/
+├── components/
+│   ├── Card.tsx           # トランプカード表示
+│   ├── GameBoard.tsx      # ゲームボード（メインUI）
+│   └── Ranking.tsx        # ランキング表示
+├── constants/
+│   └── index.ts           # 定数定義
+├── hooks/
+│   └── useGame.ts         # ゲームロジック
+├── types/
+│   └── index.ts           # 型定義
+└── index.ts               # 公開API
+```
+
+### 16.2 型定義（src/features/game/types/index.ts）
+
+```typescript
+// スート（マーク）
+type Suit = 'hearts' | 'diamonds' | 'clubs' | 'spades'
+
+// カード値（1-13: A-K）
+type CardValue = 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13
+
+// カード
+interface Card {
+  readonly suit: Suit
+  readonly value: CardValue
+}
+
+// プレイヤーの予想
+type Guess = 'high' | 'low'
+
+// ゲーム状態
+type GameState = 'playing' | 'won' | 'lost' | 'draw' | 'gameover'
+
+// ランキングエントリ
+interface RankingEntry {
+  readonly rank: number
+  readonly name: string
+  readonly score: number
+}
+```
+
+### 16.3 定数定義（src/features/game/constants/index.ts）
+
+```typescript
+// スート一覧
+const SUITS: readonly Suit[] = ['hearts', 'diamonds', 'clubs', 'spades']
+
+// スート絵文字
+const SUIT_EMOJI: Record<Suit, string> = {
+  hearts: '♥',
+  diamonds: '♦',
+  clubs: '♣',
+  spades: '♠',
+}
+
+// スート色（Tailwind CSS）
+const SUIT_COLOR: Record<Suit, string> = {
+  hearts: 'text-red-500',
+  diamonds: 'text-red-500',
+  clubs: 'text-gray-900',
+  spades: 'text-gray-900',
+}
+
+// カード値表示
+const VALUE_DISPLAY: Record<CardValue, string> = {
+  1: 'A',
+  2: '2',
+  3: '3',
+  4: '4',
+  5: '5',
+  6: '6',
+  7: '7',
+  8: '8',
+  9: '9',
+  10: '10',
+  11: 'J',
+  12: 'Q',
+  13: 'K',
+}
+
+// ランキングデータ（固定）
+const RANKING_DATA: readonly RankingEntry[] = [
+  { rank: 1, name: 'RIKI', score: 47 },
+  { rank: 2, name: 'Boo', score: 40 },
+  { rank: 3, name: 'Itusuki', score: 39 },
+  { rank: 4, name: 'MAIKO', score: 33 },
+  { rank: 5, name: 'DAI', score: 31 },
+]
+
+// 初期コイン数
+const INITIAL_COINS = 10
+
+// アニメーション遅延（ミリ秒）
+const ANIMATION_DELAY = {
+  REVEAL: 500, // カード判定までの遅延
+  NEXT_ROUND: 1000, // 次のラウンドへの遷移
+}
+
+// ローカルストレージキー
+const STORAGE_KEY = {
+  HIGH_SCORE: 'hi-and-low-high-score',
+  COINS: 'hi-and-low-coins',
+}
+```
+
+### 16.4 ゲームロジック（src/features/game/hooks/useGame.ts）
+
+#### 状態管理
+
+| 状態          | 型           | 初期値           | 説明                   |
+| ------------- | ------------ | ---------------- | ---------------------- |
+| currentCard   | Card \| null | null（後で設定） | 現在のカード           |
+| nextCard      | Card \| null | null             | 次のカード             |
+| gameState     | GameState    | 'playing'        | ゲーム状態             |
+| streak        | number       | 0                | 連勝数                 |
+| highScore     | number       | localStorage     | ハイスコア             |
+| coins         | number       | localStorage/10  | 所持コイン             |
+| isRevealing   | boolean      | false            | カード判定中フラグ     |
+| isInitialized | boolean      | false            | クライアント初期化済み |
+
+#### 主要関数
+
+**makeGuess(guess: Guess): void**
+
+- ガード条件: currentCard===null, gameState!=='playing', isRevealing, coins<=0
+- 1コイン消費
+- 新しいカードを生成してnextCardに設定
+- isRevealingをtrueに設定
+- 500ms後に判定実行:
+  - ドロー（同値）: コイン返却、gameState='draw'、次のラウンドへ
+  - 勝利: 連勝数分のコイン獲得、gameState='won'、ハイスコア更新確認、次のラウンドへ
+  - 敗北: gameState='lost'または'gameover'（コイン0の場合）
+
+**resetGame(): void**
+
+- ゲーム状態を初期化（コインは維持）
+
+**fullReset(): void**
+
+- ゲーム状態を完全初期化（コインも10枚にリセット）
+
+#### SSR対応（Hydration Mismatch防止）
+
+```typescript
+// クライアント側でのみカード生成
+useEffect(() => {
+  setCurrentCard(generateRandomCard())
+  setHighScore(safeStorage.get(STORAGE_KEY.HIGH_SCORE, 0))
+  setCoins(safeStorage.get(STORAGE_KEY.COINS, INITIAL_COINS))
+  setIsInitialized(true)
+}, [])
+```
+
+#### 安全なlocalStorage操作
+
+```typescript
+const safeStorage = {
+  get<T>(key: string, defaultValue: T): T {
+    if (typeof window === 'undefined') return defaultValue
+    try {
+      const stored = localStorage.getItem(key)
+      if (stored === null) return defaultValue
+      return JSON.parse(stored) as T
+    } catch {
+      return defaultValue
+    }
+  },
+  set<T>(key: string, value: T): void {
+    if (typeof window === 'undefined') return
+    try {
+      localStorage.setItem(key, JSON.stringify(value))
+    } catch {
+      /* 静かに失敗 */
+    }
+  },
+}
+```
+
+#### メモリリーク防止
+
+```typescript
+// タイマーRef管理
+const revealTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+const transitionTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+const isMountedRef = useRef(true)
+
+// クリーンアップ
+useEffect(() => {
+  isMountedRef.current = true
+  return () => {
+    isMountedRef.current = false
+    clearAllTimers()
+  }
+}, [])
+```
+
+### 16.5 コンポーネント仕様
+
+#### Card.tsx - トランプカード
+
+**Props:**
+
+```typescript
+interface CardProps {
+  readonly card: Card | null
+  readonly isHidden?: boolean // 裏面表示
+  readonly className?: string
+}
+```
+
+**レンダリング:**
+
+- 裏面: 青いグラデーション背景 + 🃏絵文字
+- 表面: 白背景、左上/中央/右下（回転）にスート表示
+- サイズ: w-24 h-36（96px x 144px）
+
+#### GameBoard.tsx - ゲームボード
+
+**構成:**
+
+1. ヘッダー（🃏 Hi & Low）
+2. トースト通知（初回アクセス時、右からスライドイン）
+3. スコア表示（コイン、連勝、ハイスコア）
+4. カード表示エリア（現在のカード → 次のカード）
+5. 操作ボタンエリア（HIGH/LOW、状態メッセージ）
+6. ランキング
+
+**トースト通知仕様:**
+
+```typescript
+// 状態: 'hidden' | 'entering' | 'visible' | 'exiting'
+// アニメーション: 右端からスライドイン（500ms）
+// 表示時間: 3秒
+// メッセージ: "通知：🔥 きょうもハイスコアを更新しよう！"
+```
+
+**ボタン状態:**
+| gameState | 表示内容 |
+| --------- | -------- |
+| playing | HIGH/LOWボタン |
+| won | "🎉 正解！ +{streak}コイン" |
+| draw | "🤝 ドロー！コイン返却" |
+| lost | "💥 続ける"ボタン |
+| gameover | "💀 ゲームオーバー" + "🔄 最初からやり直す"ボタン |
+| revealing | "判定中..." |
+
+#### Ranking.tsx - ランキング表示
+
+**Props:**
+
+```typescript
+interface RankingProps {
+  readonly entries: readonly RankingEntry[]
+  readonly className?: string
+  readonly isSecretActivated?: boolean // 微妙な色変化
+}
+```
+
+**ランクアイコン:**
+
+```typescript
+function getRankIcon(rank: number): string {
+  if (rank <= 0) return '-'
+  if (rank === 1) return '🥇'
+  if (rank === 2) return '🥈'
+  if (rank === 3) return '🥉'
+  return String(rank)
+}
+```
+
+### 16.6 UI/UXデザイン
+
+#### カラーパレット
+
+| 要素             | 色                                   |
+| ---------------- | ------------------------------------ |
+| 背景             | green-800 → green-900 グラデーション |
+| ヘッダーテキスト | white                                |
+| コイン           | yellow-300                           |
+| ハイスコア       | yellow-400                           |
+| 連勝             | white                                |
+| HIGHボタン       | red-500                              |
+| LOWボタン        | blue-500                             |
+| 続けるボタン     | yellow-500                           |
+| リセットボタン   | purple-500                           |
+| トースト         | yellow-500                           |
+| ランキング背景   | gray-100/gray-50                     |
+
+#### アニメーション
+
+| 要素           | アニメーション                        |
+| -------------- | ------------------------------------- |
+| ボタンホバー   | scale-95 + shadow-xl                  |
+| トースト       | translateX スライド（500ms ease-out） |
+| 状態メッセージ | 背景色 + 透明度変化                   |
+
+### 16.7 データ永続化
+
+**localStorage キー:**
+
+- `hi-and-low-high-score`: ハイスコア（number）
+- `hi-and-low-coins`: 所持コイン（number）
+
+**初期化:**
+
+- ハイスコア: 0
+- コイン: 10
+
+### 16.8 ページ構成（src/app/page.tsx）
+
+```typescript
+export default function Home(): React.JSX.Element {
+  return (
+    <FeatureErrorBoundary featureName="game">
+      <GameBoard />
+    </FeatureErrorBoundary>
+  )
+}
+```
+
+### 16.9 回帰テスト
+
+| ID             | ファイル                   | テスト内容                                              |
+| -------------- | -------------------------- | ------------------------------------------------------- |
+| 2025-02-04-001 | game-edge-cases.test.ts    | localStorage エラー、コイン計算、ランキングエッジケース |
+| 2025-02-04-002 | hydration-mismatch.test.ts | SSR/Hydration対策パターン                               |
+| 2025-02-04-003 | timer-cleanup.test.ts      | タイマークリーンアップ、isMountedRef                    |
+
 ---
 
-**最終更新**: 2026-01-28
-**バージョン**: 2.1.0
+**最終更新**: 2025-02-04
+**バージョン**: 3.0.0

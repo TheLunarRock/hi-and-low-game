@@ -3,6 +3,7 @@
 ## 🚀 アップグレード完了：v3 → v4.0.8
 
 ### 📊 バージョン情報
+
 - **Framework**: SuperClaude v4.0.8 Production Edition
 - **Template**: Enterprise-ready with Feature-based Architecture
 - **Updated**: 2025-08-31
@@ -10,12 +11,14 @@
 ## 📋 プロジェクト固有設定
 
 ### テンプレート仕様
+
 - **名称**: SuperClaude v4 Production Edition Template
 - **用途**: エンタープライズグレードNext.jsアプリケーション開発
 - **アーキテクチャ**: フィーチャーベース開発（厳格な境界管理）
 - **対象**: 本格的なプロダクション開発
 
 ### 技術スタック
+
 - **フレームワーク**: Next.js 14.2.31
 - **言語**: TypeScript 5.x（厳格モード）
 - **スタイリング**: Tailwind CSS 3.4.3
@@ -24,18 +27,21 @@
 - **状態管理**: Zustand 4.5.0
 
 ### 重要な設計原則
+
 1. **フック非公開の絶対ルール**: index.tsからフックを絶対に公開しない
 2. **境界違反ゼロトレランス**: 自動検出・自動修正
 3. **100% Claude Code実装**: 人間はコードを書かない
 4. **並列実行最適化**: 最大25タスク並列実行
 
 ### デプロイ設定
+
 - **推奨プラットフォーム**: Vercel（最適化済み）
 - **代替**: Netlify, AWS Amplify
 - **Node.js要件**: >=18.0.0
 - **パッケージマネージャー**: pnpm（推奨）
 
 ### パフォーマンス指標
+
 - **First Load JS**: 102KB（目標: <150KB）
 - **ビルド時間**: 約2秒
 - **境界チェック**: <100ms
@@ -76,6 +82,7 @@
 ```
 
 ### 初回セットアップ
+
 ```bash
 # リポジトリをクローン
 git clone [your-repo-url] my-app
@@ -91,6 +98,7 @@ pnpm dev
 ### Claude Code実装パターン
 
 #### 新機能開発
+
 ```bash
 # 1. 開始
 pnpm claude:start
@@ -106,6 +114,7 @@ pnpm claude:complete
 ```
 
 #### エラー対応
+
 ```bash
 # 境界違反エラー
 pnpm fix:boundaries
@@ -119,26 +128,83 @@ pnpm test:unit  # 個別テスト実行
 
 ### SuperClaudeフラグ対応表
 
-| タスク | 推奨フラグ | 効果 |
-|--------|----------|------|
-| 新機能開発 | `--task-manage --validate` | タスク管理+自動検証 |
-| UI開発 | `--magic /ui` | 21st.dev UIパターン |
-| 複雑な分析 | `--think-hard --sequential` | 深い分析 |
-| リファクタリング | `--morph --validate` | パターン適用+検証 |
-| E2Eテスト | `--playwright` | ブラウザ自動化 |
+| タスク           | 推奨フラグ                  | 効果                |
+| ---------------- | --------------------------- | ------------------- |
+| 新機能開発       | `--task-manage --validate`  | タスク管理+自動検証 |
+| UI開発           | `--magic /ui`               | 21st.dev UIパターン |
+| 複雑な分析       | `--think-hard --sequential` | 深い分析            |
+| リファクタリング | `--morph --validate`        | パターン適用+検証   |
+| E2Eテスト        | `--playwright`              | ブラウザ自動化      |
 
 ### MCPサーバー活用
 
-| サーバー | 用途 | 自動トリガー |
-|---------|------|------------|
-| Context7 | ライブラリドキュメント | import文検出時 |
-| Sequential | 複雑な分析 | --thinkフラグ |
-| Magic | UI生成 | /ui, /21コマンド |
-| Morphllm | 大規模編集 | 複数ファイル編集時 |
-| Playwright | E2Eテスト | test:e2e実行時 |
-| Serena | セマンティック分析 | シンボル操作時 |
+| サーバー   | 用途                   | 自動トリガー       |
+| ---------- | ---------------------- | ------------------ |
+| Context7   | ライブラリドキュメント | import文検出時     |
+| Sequential | 複雑な分析             | --thinkフラグ      |
+| Magic      | UI生成                 | /ui, /21コマンド   |
+| Morphllm   | 大規模編集             | 複数ファイル編集時 |
+| Playwright | E2Eテスト              | test:e2e実行時     |
+| Serena     | セマンティック分析     | シンボル操作時     |
 
 ## プロジェクト固有の設定
 
-<!-- ここにプロジェクト固有の設定を追加 -->
-<!-- 例：API設定、環境変数、業務ロジック等 -->
+### 🎮 Hi & Low Game
+
+#### アプリケーション概要
+
+- **名称**: Hi & Low Game
+- **種類**: カードゲームWebアプリケーション
+- **実装日**: 2025-02-04
+- **ブランチ**: feature/game-20260204 → main マージ済み
+
+#### 技術スタック
+
+- **フレームワーク**: Next.js 15 + React 19
+- **スタイリング**: Tailwind CSS
+- **バックエンド**: Supabase（将来のハイスコア保存用）
+- **テスト**: Vitest（ユニット）+ Playwright（E2E）
+
+#### 主要機能
+
+| 機能           | 説明                               |
+| -------------- | ---------------------------------- |
+| カードゲーム   | HIGH/LOW予想でコインを獲得         |
+| コインシステム | 初期10枚、勝利で連勝数分獲得       |
+| ランキング     | 固定ランキング表示                 |
+| トースト通知   | ゲームアクセス時にスライドイン表示 |
+
+#### フィーチャー構造
+
+```
+src/features/game/
+├── components/
+│   ├── Card.tsx          # カード表示コンポーネント
+│   ├── GameBoard.tsx     # ゲームボード（メイン画面）
+│   └── Ranking.tsx       # ランキング表示
+├── constants/
+│   └── index.ts          # 定数定義（SUITS, VALUES等）
+├── hooks/
+│   └── useGame.ts        # ゲームロジックフック
+├── types/
+│   └── index.ts          # 型定義
+└── index.ts              # 公開API
+```
+
+#### SSR対応実装パターン
+
+- **isInitializedパターン**: Hydration mismatch防止
+- **safeStorage**: localStorage安全アクセス
+- **useRef + isMountedRef**: メモリリーク防止
+
+#### 回帰テスト
+
+| テストID       | 内容                             |
+| -------------- | -------------------------------- |
+| 2025-02-04-001 | localStorage・コインエッジケース |
+| 2025-02-04-002 | SSR/Hydration対策パターン        |
+| 2025-02-04-003 | タイマークリーンアップ           |
+
+#### 詳細仕様
+
+完全な技術仕様は [SPECIFICATION.md](./SPECIFICATION.md) のセクション16を参照
