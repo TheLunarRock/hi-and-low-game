@@ -32,7 +32,7 @@ export function Ranking({
   return (
     <div
       className={`rounded-lg p-4 transition-colors duration-300 ${
-        isSecretActivated ? 'bg-gray-50' : 'bg-gray-100'
+        isSecretActivated ? 'bg-[#f3f4f8]' : 'bg-gray-100'
       } ${className}`}
     >
       <h2 className="mb-3 text-center text-lg font-bold text-gray-800">🏆 ランキング</h2>

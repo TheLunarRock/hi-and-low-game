@@ -2,21 +2,20 @@
 
 import { useEffect, useState } from 'react'
 
-import { RANKING_DATA } from '../constants'
+import { RANKING_DATA, TOAST_CONFIG } from '../constants'
 import { useGame } from '../hooks/useGame'
+import { useSecretGesture } from '../hooks/useSecretGesture'
 import type { GameState } from '../types'
 import { Card } from './Card'
 import { Ranking } from './Ranking'
 
-interface GameBoardProps {
-  /** シークレットアクティベーション状態 */
-  readonly isSecretActivated?: boolean
-}
-
 /**
  * ゲームボードコンポーネント
  */
-export function GameBoard({ isSecretActivated = false }: GameBoardProps): React.JSX.Element {
+export function GameBoard(): React.JSX.Element {
+  // シークレットジェスチャー
+  const { isActivated, onPressStart, onPressEnd, onTap } = useSecretGesture()
+
   const {
     currentCard,
     nextCard,
@@ -44,13 +43,13 @@ export function GameBoard({ isSecretActivated = false }: GameBoardProps): React.
     setToastState('entering')
 
     // アニメーション後にvisibleに
-    const enterTimer = setTimeout(() => setToastState('visible'), 50)
+    const enterTimer = setTimeout(() => setToastState('visible'), TOAST_CONFIG.ENTER_DELAY)
 
-    // 3秒後にスライドアウト開始
-    const exitTimer = setTimeout(() => setToastState('exiting'), 3000)
+    // 表示時間後にスライドアウト開始
+    const exitTimer = setTimeout(() => setToastState('exiting'), TOAST_CONFIG.DISPLAY_DURATION)
 
     // アニメーション後に非表示
-    const hideTimer = setTimeout(() => setToastState('hidden'), 3500)
+    const hideTimer = setTimeout(() => setToastState('hidden'), TOAST_CONFIG.HIDE_DELAY)
 
     return () => {
       clearTimeout(enterTimer)
@@ -73,7 +72,23 @@ export function GameBoard({ isSecretActivated = false }: GameBoardProps): React.
     <div className="flex min-h-screen flex-col bg-gradient-to-b from-green-800 to-green-900 px-4 py-8">
       {/* ヘッダー */}
       <header className="mb-6 flex items-center justify-center gap-2">
-        <span className="text-3xl">🃏</span>
+        <span
+          className="select-none text-3xl"
+          onPointerDown={(e) => {
+            e.preventDefault()
+            onPressStart()
+          }}
+          onPointerUp={onPressEnd}
+          onPointerLeave={onPressEnd}
+          onPointerCancel={onPressEnd}
+          onClick={(e) => {
+            e.preventDefault()
+            onTap()
+          }}
+          role="presentation"
+        >
+          🃏
+        </span>
         <h1 className="text-3xl font-bold text-white">Hi & Low</h1>
       </header>
 
@@ -129,7 +144,7 @@ export function GameBoard({ isSecretActivated = false }: GameBoardProps): React.
 
       {/* ランキング */}
       <div className="mx-auto w-full max-w-sm">
-        <Ranking entries={RANKING_DATA} isSecretActivated={isSecretActivated} />
+        <Ranking entries={RANKING_DATA} isSecretActivated={isActivated} />
       </div>
     </div>
   )
