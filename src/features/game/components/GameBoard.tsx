@@ -74,6 +74,7 @@ export function GameBoard(): React.JSX.Element {
       <header className="mb-6 flex items-center justify-center gap-2">
         <span
           className="select-none text-3xl"
+          style={{ touchAction: 'none' }}
           onPointerDown={(e) => {
             e.preventDefault()
             onPressStart()

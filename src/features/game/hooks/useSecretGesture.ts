@@ -61,6 +61,9 @@ export function useSecretGesture(): SecretGestureState {
   const tapCountRef = useRef(0)
   const firstTapTimeRef = useRef<number | null>(null)
 
+  // 長押し完了直後のclick無視用フラグ
+  const justActivatedRef = useRef(false)
+
   /**
    * 全タイマーをクリア
    */
@@ -89,6 +92,7 @@ export function useSecretGesture(): SecretGestureState {
     }
     tapCountRef.current = 0
     firstTapTimeRef.current = null
+    justActivatedRef.current = false
   }, [clearAllTimers])
 
   // クリーンアップ：アンマウント時にタイマーをクリア
@@ -116,6 +120,7 @@ export function useSecretGesture(): SecretGestureState {
     longPressTimerRef.current = setTimeout(() => {
       if (!isMountedRef.current) return
 
+      justActivatedRef.current = true // 長押し完了フラグ
       setIsActivated(true)
 
       // タップ受付ウィンドウ開始（2秒）
@@ -143,6 +148,12 @@ export function useSecretGesture(): SecretGestureState {
   const onTap = useCallback(() => {
     // アクティベート状態でない場合は何もしない
     if (!isActivatedRef.current) return
+
+    // 長押し完了直後のclickは無視（指離しはタップではない）
+    if (justActivatedRef.current) {
+      justActivatedRef.current = false
+      return
+    }
 
     const now = Date.now()
 
