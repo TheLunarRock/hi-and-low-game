@@ -81,3 +81,15 @@ export const STORAGE_KEY = {
   HIGH_SCORE: 'hi-and-low-high-score',
   COINS: 'hi-and-low-coins',
 } as const
+
+/**
+ * トースト通知設定
+ */
+export const TOAST_CONFIG = {
+  /** アニメーション開始までの遅延（ミリ秒） */
+  ENTER_DELAY: 50,
+  /** 表示時間（ミリ秒） */
+  DISPLAY_DURATION: 3000,
+  /** 非表示までの総時間（ミリ秒） */
+  HIDE_DELAY: 3500,
+} as const
