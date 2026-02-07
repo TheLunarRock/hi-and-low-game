@@ -7,7 +7,7 @@
 | 項目               | 値                                       |
 | ------------------ | ---------------------------------------- |
 | **名称**           | Hi & Low Game                            |
-| **バージョン**     | 0.1.0                                    |
+| **バージョン**     | 1.0.0（ロックダウン済み）                |
 | **用途**           | トランプを使ったハイ＆ローカードゲーム   |
 | **アーキテクチャ** | フィーチャーベース開発（厳格な境界管理） |
 | **ライセンス**     | MIT                                      |
@@ -1509,7 +1509,201 @@ describe('Regression: シークレットジェスチャー', () => {
 })
 ```
 
+## 18. ゲーム機能ロックダウン仕様（v1.0.0）
+
+### 18.1 概要
+
+v1.0.0でゲーム機能の全ファイルを安定化し、3層の保護メカニズムで変更を防止する。
+
+| 項目                     | 値                  |
+| ------------------------ | ------------------- |
+| **安定化バージョン**     | v1.0.0              |
+| **安定化日**             | 2026-02-07          |
+| **保護対象ファイル数**   | 11                  |
+| **ロックダウンテスト数** | 65                  |
+| **デプロイ先**           | Vercel (Production) |
+
+### 18.2 3層保護アーキテクチャ
+
+```
+┌─────────────────────────────────────────────────────────┐
+│ Layer 1: Git Tag v1.0.0                                  │
+│ → いつでも git checkout v1.0.0 で安定版に復元可能        │
+├─────────────────────────────────────────────────────────┤
+│ Layer 2a: パス保護（check-protected-features.js）        │
+│ → .claude/protected-features.json で保護パスを定義       │
+│ → コミット時に保護パス内のファイル変更を検出・ブロック   │
+├─────────────────────────────────────────────────────────┤
+│ Layer 2b: チェックサム保護（protect-game-checksums.js）   │
+│ → 11ファイルのSHA256チェックサムを検証                    │
+│ → 内容の改変を検出・ブロック                              │
+├─────────────────────────────────────────────────────────┤
+│ Layer 3: ロックダウンテスト（65テストケース）             │
+│ → 定数値・API表面・ゲームロジックの変更を検出             │
+│ → テスト失敗 = コミット不可（pre-commit hook）            │
+└─────────────────────────────────────────────────────────┘
+```
+
+### 18.3 保護対象ファイル一覧
+
+| ファイル                                      | 役割                     | SHA256保護 | パス保護 |
+| --------------------------------------------- | ------------------------ | ---------- | -------- |
+| `src/features/game/index.ts`                  | 公開API                  | Yes        | Yes      |
+| `src/features/game/components/Card.tsx`       | カード表示               | Yes        | Yes      |
+| `src/features/game/components/GameBoard.tsx`  | ゲームボード             | Yes        | Yes      |
+| `src/features/game/components/Ranking.tsx`    | ランキング               | Yes        | Yes      |
+| `src/features/game/hooks/useGame.ts`          | ゲームロジック           | Yes        | Yes      |
+| `src/features/game/hooks/useSecretGesture.ts` | シークレットジェスチャー | Yes        | Yes      |
+| `src/features/game/constants/index.ts`        | 定数定義                 | Yes        | Yes      |
+| `src/features/game/types/index.ts`            | 型定義                   | Yes        | Yes      |
+| `src/app/page.tsx`                            | ゲームエントリ           | Yes        | Yes      |
+| `src/app/m/page.tsx`                          | メッセンジャー           | Yes        | Yes      |
+| `src/components/ErrorBoundary.tsx`            | エラー境界               | Yes        | Yes      |
+
+### 18.4 パス保護設定（.claude/protected-features.json）
+
+```json
+{
+  "protectedFeatures": [
+    {
+      "name": "game",
+      "description": "Hi & Low カードゲーム機能（v1.0.0で安定化済み）",
+      "paths": [
+        "src/features/game/",
+        "src/app/page.tsx",
+        "src/app/m/",
+        "src/components/ErrorBoundary.tsx"
+      ],
+      "protection": "strict",
+      "allowFlags": ["--allow-game-changes"]
+    }
+  ],
+  "globalSettings": {
+    "strictMode": true,
+    "emergencyBypass": "--emergency-override"
+  }
+}
+```
+
+### 18.5 チェックサム保護スクリプト（scripts/protect-game-checksums.js）
+
+**コマンド:**
+
+| コマンド                   | 説明                           |
+| -------------------------- | ------------------------------ |
+| `pnpm protect:game`        | チェックサム検証実行           |
+| `pnpm protect:game:init`   | チェックサム初期化             |
+| `pnpm protect:game:update` | 意図的変更後のチェックサム更新 |
+| `pnpm check:protected`     | パス保護チェック実行           |
+
+**チェックサム保存先:** `scripts/.game-checksums.json`
+
+**バイパス方法:**
+
+| 方法                                              | 用途                           |
+| ------------------------------------------------- | ------------------------------ |
+| `ALLOW_GAME_CHANGES=1 git commit`                 | チェックサム保護のスキップ     |
+| コミットメッセージに `--allow-game-changes`       | パス保護のスキップ             |
+| コミットメッセージに `--emergency-override`       | 全保護のスキップ（緊急時のみ） |
+| `node scripts/protect-game-checksums.js --update` | チェックサム再計算             |
+
+### 18.6 pre-commitフック実行順序
+
+```
+1. protect-config.js              # 設定ファイル保護（既存）
+2. check-protected-features.js    # パス保護（v1.0.0追加）
+3. protect-game-checksums.js      # チェックサム保護（v1.0.0追加）
+4. 単一フィーチャーチェック        # 複数フィーチャー同時コミット防止（既存）
+5. check:boundaries               # 境界違反検出（既存）
+6. lint-staged                    # ESLint + Prettier（既存）
+7. test:unit                      # 全テスト実行（既存）
+```
+
+### 18.7 ロックダウンテスト仕様
+
+#### 2026-02-07-001: 定数ロック（20テスト）
+
+| テスト対象      | 検証内容                                               |
+| --------------- | ------------------------------------------------------ |
+| SUITS           | 4スートの順序と値                                      |
+| SUIT_EMOJI      | 各スートの絵文字マッピング                             |
+| SUIT_COLOR      | Tailwind CSSクラスマッピング                           |
+| VALUE_DISPLAY   | A-K（13枚）の表示文字                                  |
+| RANKING_DATA    | 5名のランキング（名前・スコア・順序）                  |
+| INITIAL_COINS   | 初期値10                                               |
+| ANIMATION_DELAY | REVEAL=500ms, NEXT_ROUND=1000ms                        |
+| STORAGE_KEY     | HIGH_SCORE, COINS のキー文字列                         |
+| TOAST_CONFIG    | ENTER_DELAY=50, DISPLAY_DURATION=3000, HIDE_DELAY=3500 |
+
+#### 2026-02-07-002: API表面ロック（13テスト）
+
+| テスト対象     | 検証内容                                               |
+| -------------- | ------------------------------------------------------ |
+| エクスポート   | GameBoardのみ（1つ）                                   |
+| GameBoard      | 関数型コンポーネントであること                         |
+| 内部漏洩防止   | useGame, useSecretGesture, Card, Ranking, 定数が非公開 |
+| RankingEntry型 | rank, name, score の3プロパティ構造                    |
+
+#### 2026-02-07-003: ゲームロジックロック（32テスト）
+
+| テスト対象       | 検証内容                                                          |
+| ---------------- | ----------------------------------------------------------------- |
+| 勝敗判定         | HIGH/LOW予想と結果の組み合わせ（6パターン）                       |
+| コイン計算       | 消費・獲得・返却・ゲームオーバー（9パターン）                     |
+| 状態遷移         | won/lost/draw/gameover（4パターン）                               |
+| カード型         | CardValue, Suit, Card, Guess, GameState の構造（5パターン）       |
+| シークレット設定 | 3000ms長押し, 2000msタップ窓, 1000msタイムアウト, 3タップ, /m遷移 |
+| ストレージ       | キー文字列の一致（2パターン）                                     |
+
+### 18.8 意図的な変更手順
+
+ゲーム機能を意図的に変更する場合の手順：
+
+```bash
+# 1. 変更を実施
+# 2. チェックサムを更新
+node scripts/protect-game-checksums.js --update
+
+# 3. ロックダウンテストを更新（値が変わった場合）
+# tests/regression/2026-02-07-*.test.ts を修正
+
+# 4. パス保護をバイパスしてコミット
+git commit -m "feat(game): 機能改善 --allow-game-changes"
+
+# 5. タグを更新（必要に応じて）
+git tag -a v1.1.0 -m "v1.1.0: ゲーム機能更新"
+```
+
+## 19. デプロイ情報
+
+### 19.1 Vercel設定
+
+| 項目                  | 値                      |
+| --------------------- | ----------------------- |
+| **プロジェクト名**    | hi-and-low-game         |
+| **プラットフォーム**  | Vercel                  |
+| **ビルドコマンド**    | `pnpm build`            |
+| **出力ディレクトリ**  | `.next`                 |
+| **Node.jsバージョン** | 20.x                    |
+| **リージョン**        | iad1 (Washington, D.C.) |
+
+### 19.2 ページ構成
+
+| ルート        | サイズ  | 種別   | 説明                                 |
+| ------------- | ------- | ------ | ------------------------------------ |
+| `/`           | 4 kB    | Static | ゲームメインページ                   |
+| `/m`          | 3.45 kB | Static | メッセンジャーページ（シークレット） |
+| `/_not-found` | 992 B   | Static | 404ページ                            |
+
+### 19.3 パフォーマンス
+
+| 指標                   | 値                   |
+| ---------------------- | -------------------- |
+| First Load JS (shared) | 102 kB               |
+| ビルド時間             | ~3.6秒（コンパイル） |
+| 静的ページ生成         | 5ページ              |
+
 ---
 
-**最終更新**: 2025-02-06
-**バージョン**: 3.1.0
+**最終更新**: 2026-02-07
+**バージョン**: 4.0.0（v1.0.0ロックダウン対応）

@@ -59,6 +59,56 @@ node scripts/protect-config.js
 
 # ═══════════════════════════════════════════════════
 
+# 🔒 ゲーム機能ロックダウン（v1.0.0 - 絶対遵守）
+
+# ═══════════════════════════════════════════════════
+
+## ⛔ ゲーム機能のファイルは変更禁止
+
+**以下の11ファイルはv1.0.0で安定化済みであり、変更してはいけません：**
+
+| ファイル                                      | 役割                                       |
+| --------------------------------------------- | ------------------------------------------ |
+| `src/features/game/index.ts`                  | 公開API（GameBoard + RankingEntry型のみ）  |
+| `src/features/game/components/Card.tsx`       | カード表示コンポーネント                   |
+| `src/features/game/components/GameBoard.tsx`  | ゲームボード（メイン画面）                 |
+| `src/features/game/components/Ranking.tsx`    | ランキング表示                             |
+| `src/features/game/hooks/useGame.ts`          | ゲームロジックフック                       |
+| `src/features/game/hooks/useSecretGesture.ts` | シークレットジェスチャーフック             |
+| `src/features/game/constants/index.ts`        | 定数定義（SUITS, VALUES等）                |
+| `src/features/game/types/index.ts`            | 型定義（Card, GameState等）                |
+| `src/app/page.tsx`                            | ゲームページ                               |
+| `src/app/m/page.tsx`                          | メッセンジャーページ（シークレット遷移先） |
+| `src/components/ErrorBoundary.tsx`            | エラーバウンダリ                           |
+
+## 🛡️ 3層保護アーキテクチャ
+
+| レイヤー     | 保護方法                                             | 検証コマンド                 |
+| ------------ | ---------------------------------------------------- | ---------------------------- |
+| **Layer 1**  | Git Tag `v1.0.0`                                     | `git checkout v1.0.0` で復元 |
+| **Layer 2a** | パス保護（`.claude/protected-features.json`）        | `pnpm check:protected`       |
+| **Layer 2b** | SHA256チェックサム（`scripts/.game-checksums.json`） | `pnpm protect:game`          |
+| **Layer 3**  | ロックダウンテスト（65テスト）                       | `pnpm test:unit`             |
+
+## 🚨 バイパス方法（意図的な変更が必要な場合のみ）
+
+| 方法                 | コマンド                                    | 用途                             |
+| -------------------- | ------------------------------------------- | -------------------------------- |
+| チェックサムスキップ | `ALLOW_GAME_CHANGES=1 git commit`           | チェックサム保護のバイパス       |
+| パス保護スキップ     | コミットメッセージに `--allow-game-changes` | パス保護のバイパス               |
+| 緊急バイパス         | コミットメッセージに `--emergency-override` | 全保護のバイパス                 |
+| チェックサム更新     | `pnpm protect:game:update`                  | 意図的変更後のチェックサム再計算 |
+
+## 📋 Claude Codeへの絶対指示（ゲーム機能）
+
+1. **ゲーム機能のファイルは読み取り専用** - 11ファイルの編集禁止
+2. **定数値の変更禁止** - INITIAL_COINS=10, RANKING_DATA等の値は固定
+3. **公開API変更禁止** - GameBoardのみエクスポート（追加・削除禁止）
+4. **ゲームルール変更禁止** - 勝利/敗北/引き分け判定ロジックは固定
+5. **新機能追加は別フィーチャーで** - gameフィーチャー外に新規作成
+
+# ═══════════════════════════════════════════════════
+
 # 📁 Claude Code設定ファイル構造
 
 # ═══════════════════════════════════════════════════
