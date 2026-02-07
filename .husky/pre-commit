@@ -9,6 +9,20 @@ node scripts/protect-config.js || {
   exit 1
 }
 
+# 🔒 保護されたフィーチャーのチェック（v1.0.0安定化済み機能）
+echo "🔒 保護フィーチャーチェック..."
+node scripts/check-protected-features.js --hook || {
+  echo "❌ 保護されたフィーチャーへの変更がブロックされました！"
+  exit 1
+}
+
+# 🔒 ゲームファイルの整合性チェック（SHA256チェックサム）
+echo "🔒 ゲームファイル整合性チェック..."
+node scripts/protect-game-checksums.js || {
+  echo "❌ ゲームファイルの不正な変更を検出しました！"
+  exit 1
+}
+
 # 🛡️ 複数フィーチャーの同時変更を検出（エラーループ防止）
 echo "🔍 単一フィーチャーチェック..."
 CHANGED_FEATURES=$(git diff --cached --name-only | grep '^src/features/' | cut -d'/' -f3 | sort -u)

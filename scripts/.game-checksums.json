@@ -1,0 +1,18 @@
+{
+  "version": "1.0.0",
+  "createdAt": "2026-02-07T14:57:48.899Z",
+  "description": "Hi & Low ゲーム v1.0.0 安定版のファイルチェックサム",
+  "files": {
+    "src/features/game/index.ts": "b871c87c2aca4e9573d6fd87d197b9a9f0370346d046020bd77d45992f4b2b3e",
+    "src/features/game/components/Card.tsx": "b56b7fcd2878396e123c96da20e76d37b91a696f9039727328e08dd6d0926110",
+    "src/features/game/components/GameBoard.tsx": "0f05659016bfe3600ef54d2aaee7b7e8d171112f9644de8ce8379da1a95e0686",
+    "src/features/game/components/Ranking.tsx": "2d325962d97250767a0c232c15cd7b7aec09f3b789b0ab566c094ce85e7e8d97",
+    "src/features/game/hooks/useGame.ts": "bf59310109009ebfa3765425cd54050b0d64fa6014b428727514a54690c27304",
+    "src/features/game/hooks/useSecretGesture.ts": "a534af2fc8eed1d980c13610b4b7ed72dd99e4e49f38587629e09152fd7386b8",
+    "src/features/game/constants/index.ts": "87be6e41fb5409df14d714277a4949f0e2250177342c1a179d78bf2e947b6ebd",
+    "src/features/game/types/index.ts": "84caa054846804fd8e3ab3ae00dbe2856ee1d90e04fd27e1ffd504ae76c14526",
+    "src/app/page.tsx": "edeb785f4185585cd386f3bbb8e1097a0bea292dc66998a773c60d12994cdaac",
+    "src/app/m/page.tsx": "71df34fa6d3dba8f4982d0ee494ab7422f13f31597b48af5f0d0ef0db4934c97",
+    "src/components/ErrorBoundary.tsx": "ba6091620d96676db6876a3d33184feb5b9dfe8874c5932b2cad339246a16010"
+  }
+}

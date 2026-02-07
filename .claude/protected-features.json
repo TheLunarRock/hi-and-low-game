@@ -1,0 +1,31 @@
+{
+  "protectedFeatures": [
+    {
+      "name": "game",
+      "description": "Hi & Low カードゲーム機能（v1.0.0で安定化済み）",
+      "paths": [
+        "src/features/game/",
+        "src/app/page.tsx",
+        "src/app/m/",
+        "src/components/ErrorBoundary.tsx"
+      ],
+      "protection": "strict",
+      "reason": "v1.0.0で安定化されたゲーム機能。変更には明示的な許可が必要です",
+      "protectedAt": "2026-02-07T00:00:00Z",
+      "allowFlags": ["--allow-game-changes"]
+    }
+  ],
+  "globalSettings": {
+    "strictMode": true,
+    "logChanges": true,
+    "requireExplicitApproval": true,
+    "emergencyBypass": "--emergency-override",
+    "adminContact": "開発チーム"
+  },
+  "metadata": {
+    "version": "1.0.0",
+    "lastUpdated": "2026-02-07T00:00:00Z",
+    "totalProtectedFeatures": 1,
+    "totalProtectedPaths": 4
+  }
+}
