@@ -927,6 +927,22 @@ src/features/game/
 └── index.ts               # 公開API
 ```
 
+**公開API（src/features/game/index.ts）:**
+
+```typescript
+'use client'
+
+// コンポーネント（公開）- ページから使用するため必要
+export { GameBoard } from './components/GameBoard'
+
+// 型定義（必要な型のみ公開）
+export type { RankingEntry } from './types'
+```
+
+- `'use client'` ディレクティブ必須（GameBoardがクライアントコンポーネントのため）
+- GameBoardのみnamed export（他のコンポーネント・フック・定数は非公開）
+- RankingEntry型のみ型エクスポート（テスト用途）
+
 ### 16.2 型定義（src/features/game/types/index.ts）
 
 ```typescript
@@ -947,6 +963,15 @@ type Guess = 'high' | 'low'
 
 // ゲーム状態
 type GameState = 'playing' | 'won' | 'lost' | 'draw' | 'gameover'
+
+// ゲーム結果（将来のAPI拡張用。v1.0.0では未使用）
+interface GameResult {
+  readonly state: GameState
+  readonly currentCard: Card
+  readonly nextCard: Card | null
+  readonly streak: number
+  readonly highScore: number
+}
 
 // ランキングエントリ
 interface RankingEntry {
@@ -1018,6 +1043,13 @@ const STORAGE_KEY = {
   HIGH_SCORE: 'hi-and-low-high-score',
   COINS: 'hi-and-low-coins',
 }
+
+// トースト通知設定
+const TOAST_CONFIG = {
+  ENTER_DELAY: 50, // アニメーション開始までの遅延（ms）
+  DISPLAY_DURATION: 3000, // 表示時間（ms）
+  HIDE_DELAY: 3500, // 非表示までの総時間（ms）
+}
 ```
 
 ### 16.4 ゲームロジック（src/features/game/hooks/useGame.ts）
@@ -1043,18 +1075,31 @@ const STORAGE_KEY = {
 - 1コイン消費
 - 新しいカードを生成してnextCardに設定
 - isRevealingをtrueに設定
-- 500ms後に判定実行:
-  - ドロー（同値）: コイン返却、gameState='draw'、次のラウンドへ
-  - 勝利: 連勝数分のコイン獲得、gameState='won'、ハイスコア更新確認、次のラウンドへ
-  - 敗北: gameState='lost'または'gameover'（コイン0の場合）
+- ANIMATION_DELAY.REVEAL（500ms）後に判定実行:
+
+```typescript
+const isDraw = newCard.value === currentCard.value
+const isWin =
+  (guess === 'high' && newCard.value > currentCard.value) ||
+  (guess === 'low' && newCard.value < currentCard.value)
+```
+
+**判定結果と処理:**
+
+| 結果           | 条件                  | コイン変動    | gameState  | 連勝        | 次ラウンド         |
+| -------------- | --------------------- | ------------- | ---------- | ----------- | ------------------ |
+| ドロー         | 同じ値                | +1（返却）    | 'draw'     | 維持        | 1000ms後に自動遷移 |
+| 勝利           | 予想と一致            | +streak+1     | 'won'      | +1          | 1000ms後に自動遷移 |
+| 敗北           | 予想と不一致、coins>0 | 0（消費済み） | 'lost'     | 0にリセット | ボタンで手動遷移   |
+| ゲームオーバー | 予想と不一致、coins=0 | 0             | 'gameover' | 0にリセット | fullResetで再開    |
 
 **resetGame(): void**
 
-- ゲーム状態を初期化（コインは維持）
+- clearAllTimers → generateRandomCard → 状態リセット（コインは維持）
 
 **fullReset(): void**
 
-- ゲーム状態を完全初期化（コインも10枚にリセット）
+- resetGameと同じ + コインをINITIAL_COINS(10)にリセット + localStorage更新
 
 #### SSR対応（Hydration Mismatch防止）
 
@@ -1077,8 +1122,11 @@ const safeStorage = {
     try {
       const stored = localStorage.getItem(key)
       if (stored === null) return defaultValue
-      return JSON.parse(stored) as T
+      const parsed = JSON.parse(stored) as unknown
+      // 型チェック: パース結果がデフォルト値と同じ型の場合のみ返す
+      return typeof parsed === typeof defaultValue ? (parsed as T) : defaultValue
     } catch {
+      // localStorage無効時やパースエラー時はデフォルト値を返す
       return defaultValue
     }
   },
@@ -1087,7 +1135,7 @@ const safeStorage = {
     try {
       localStorage.setItem(key, JSON.stringify(value))
     } catch {
-      /* 静かに失敗 */
+      // Quota超過時等は静かに失敗（ゲームの続行を優先）
     }
   },
 }
@@ -1111,6 +1159,50 @@ useEffect(() => {
 }, [])
 ```
 
+#### 戻り値（useMemoでメモ化）
+
+```typescript
+return useMemo(
+  () => ({
+    currentCard, // Card | null - 現在のカード
+    nextCard, // Card | null - 次のカード
+    gameState, // GameState - ゲーム状態
+    streak, // number - 連勝数
+    highScore, // number - ハイスコア
+    coins, // number - 所持コイン
+    isRevealing, // boolean - カード判定中フラグ
+    isInitialized, // boolean - クライアント初期化済み
+    makeGuess, // (guess: Guess) => void - 予想を行う
+    resetGame, // () => void - 敗北後に続ける
+    fullReset, // () => void - コインも初期化してリセット
+  }),
+  [
+    /* 全依存配列 */
+  ]
+)
+```
+
+#### ランダムカード生成
+
+```typescript
+function generateRandomCard(): Card {
+  // Math.random()を使用（ゲーム用途のため暗号学的安全性不要）
+  // eslint-disable-next-line sonarjs/pseudo-random
+  const suit = SUITS[Math.floor(Math.random() * SUITS.length)] as Suit
+  const value = (Math.floor(Math.random() * 13) + 1) as CardValue
+  return { suit, value }
+}
+```
+
+#### 内部ユーティリティ関数
+
+| 関数名                | 引数 | 説明                                     |
+| --------------------- | ---- | ---------------------------------------- |
+| generateRandomCard    | なし | ランダムなCardを生成                     |
+| clearAllTimers        | なし | revealTimer/transitionTimerを全クリア    |
+| transitionToNextRound | Card | 1000ms後に次ラウンドへ遷移               |
+| initializeGameState   | なし | タイマークリア+新カード生成+状態リセット |
+
 ### 16.5 コンポーネント仕様
 
 #### Card.tsx - トランプカード
@@ -1127,39 +1219,90 @@ interface CardProps {
 
 **レンダリング:**
 
-- 裏面: 青いグラデーション背景 + 🃏絵文字
-- 表面: 白背景、左上/中央/右下（回転）にスート表示
+- 裏面（`isHidden=true` または `card=null`）: 青いグラデーション背景（from-blue-600 to-blue-800） + 🃏絵文字
+- 表面: 白背景、3つのエリアに分割:
+  - 左上: 値（A-K） + スート絵文字（縦並び）
+  - 中央: スート絵文字（大きめ text-3xl）
+  - 右下: 値 + スート絵文字（`rotate-180`で逆さま表示）
 - サイズ: w-24 h-36（96px x 144px）
+- スタイル: rounded-lg, border-2 border-gray-300, shadow-lg
+
+**カード表示エリア（GameBoard内）:**
+
+```typescript
+<Card card={currentCard} isHidden={currentCard === null} />
+<span>→</span>
+<Card card={nextCard} isHidden={!isRevealing && nextCard === null} />
+```
+
+- 左カード: 現在のカード（常に表）
+- 右カード: isRevealing時のみ表示、それ以外は裏面
 
 #### GameBoard.tsx - ゲームボード
 
-**構成:**
+**構成（上から順に）:**
 
-1. ヘッダー（🃏 Hi & Low）
-2. トースト通知（初回アクセス時、右からスライドイン）
-3. スコア表示（コイン、連勝、ハイスコア）
-4. カード表示エリア（現在のカード → 次のカード）
-5. 操作ボタンエリア（HIGH/LOW、状態メッセージ）
-6. ランキング
+1. **ヘッダー** - 🃏アイコン（シークレットジェスチャー対象）+ "Hi & Low" テキスト
+2. **トースト通知** - 初回アクセス時、右からスライドイン（fixed overlay）
+3. **スコア表示** - 3つのスコアを横並び（gap-6）
+   - コイン: 🪙 {coins}（text-yellow-300）
+   - 連勝: {streak}（text-white）
+   - ハイスコア: {highScore}（text-yellow-400）
+4. **カード表示エリア** - 2枚のカード + 矢印（→）
+5. **操作ボタンエリア** - min-h-[72px] で高さ固定（状態遷移時のレイアウトジャンプ防止）
+6. **ランキング** - max-w-sm で中央配置
+
+**SSR/ローディング状態:**
+
+`isInitialized === false` の間は専用ローディング画面を表示（Hydration mismatch回避）:
+
+```typescript
+if (!isInitialized) {
+  return (
+    <div className="flex min-h-screen flex-col items-center justify-center
+                    bg-gradient-to-b from-green-800 to-green-900">
+      <span className="text-4xl">🃏</span>
+      <p className="mt-4 text-xl text-white">Loading...</p>
+    </div>
+  )
+}
+```
 
 **トースト通知仕様:**
 
 ```typescript
 // 状態: 'hidden' | 'entering' | 'visible' | 'exiting'
-// アニメーション: 右端からスライドイン（500ms）
-// 表示時間: 3秒
+// TOAST_CONFIG.ENTER_DELAY(50ms)後に 'visible' へ遷移
+// TOAST_CONFIG.DISPLAY_DURATION(3000ms)後に 'exiting' へ遷移
+// TOAST_CONFIG.HIDE_DELAY(3500ms)後に 'hidden' へ遷移
+// アニメーション: translateX で右端からスライドイン/アウト（500ms ease-out）
+// 位置: fixed right-4 top-4 z-50
+// スタイル: bg-yellow-500, font-bold, text-white, rounded-lg, shadow-lg
 // メッセージ: "通知：🔥 きょうもハイスコアを更新しよう！"
+// トリガー: isInitialized が true になった時（useEffect）
 ```
 
-**ボタン状態:**
-| gameState | 表示内容 |
-| --------- | -------- |
-| playing | HIGH/LOWボタン |
-| won | "🎉 正解！ +{streak}コイン" |
-| draw | "🤝 ドロー！コイン返却" |
-| lost | "💥 続ける"ボタン |
-| gameover | "💀 ゲームオーバー" + "🔄 最初からやり直す"ボタン |
-| revealing | "判定中..." |
+**ボタン状態（GameButtons内部コンポーネント）:**
+
+GameBoard内部に定義された`GameButtons`コンポーネントが状態に応じたUIを描画する。
+
+```typescript
+function GameButtons({
+  gameState, isRevealing, coins, streak,
+  onHigh, onLow, onReset, onFullReset,
+}: { ... }): React.JSX.Element
+```
+
+| gameState | 条件                      | 表示内容                                          | スタイル                          |
+| --------- | ------------------------- | ------------------------------------------------- | --------------------------------- |
+| gameover  | -                         | "💀 ゲームオーバー" + "🔄 最初からやり直す"ボタン | bg-purple-500                     |
+| playing   | !isRevealing && coins > 0 | "⬆️ HIGH" / "⬇️ LOW" ボタン                       | bg-red-500 / bg-blue-500          |
+| won       | -                         | "🎉 正解！ +{streak}コイン"                       | bg-yellow-500/20, text-yellow-400 |
+| draw      | -                         | "🤝 ドロー！コイン返却"                           | bg-blue-500/20, text-blue-300     |
+| lost      | -                         | "💥 続ける"ボタン                                 | bg-yellow-500                     |
+| (default) | isRevealing等             | "判定中..."                                       | text-white                        |
+
+**判定優先順序:** gameover → playing → won → draw → lost → default
 
 #### Ranking.tsx - ランキング表示
 
@@ -1173,7 +1316,7 @@ interface RankingProps {
 }
 ```
 
-**ランクアイコン:**
+**ランクアイコン（getRankIcon関数）:**
 
 ```typescript
 function getRankIcon(rank: number): string {
@@ -1183,6 +1326,24 @@ function getRankIcon(rank: number): string {
   if (rank === 3) return '🥉'
   return String(rank)
 }
+```
+
+**レイアウト:**
+
+```
+┌─────────────────────────────────────┐
+│ 🏆 ランキング（text-lg, text-gray-800）│
+│                                     │
+│ ┌─────────────────────────────────┐ │
+│ │ 🥇 RIKI                     47 │ │  ← bg-white, rounded-md, shadow-sm
+│ │ 🥈 Boo                      40 │ │     名前: text-gray-700
+│ │ 🥉 Itusuki                  39 │ │     スコア: text-blue-600, font-bold
+│ │  4 MAIKO                    33 │ │
+│ │  5 DAI                      31 │ │
+│ └─────────────────────────────────┘ │
+└─────────────────────────────────────┘
+背景: bg-gray-100（通常）/ bg-blue-100（シークレット活性化時）
+遷移: transition-colors duration-300
 ```
 
 ### 16.6 UI/UXデザイン
@@ -1705,5 +1866,5 @@ git tag -a v1.1.0 -m "v1.1.0: ゲーム機能更新"
 
 ---
 
-**最終更新**: 2026-02-07
-**バージョン**: 4.0.0（v1.0.0ロックダウン対応）
+**最終更新**: 2026-02-10
+**バージョン**: 4.1.0（アプリ再現レベル詳細化）

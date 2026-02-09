@@ -2,12 +2,29 @@
 
 ## 📚 参照ドキュメント
 
-| ドキュメント                               | 内容                                 |
-| ------------------------------------------ | ------------------------------------ |
-| **[SPECIFICATION.md](./SPECIFICATION.md)** | 技術仕様書（アプリ再現レベルの詳細） |
-| **[SETUP_GUIDE.md](./SETUP_GUIDE.md)**     | セットアップ手順                     |
-| **[PROJECT_INFO.md](./PROJECT_INFO.md)**   | プロジェクト固有情報                 |
-| **[README.md](./README.md)**               | プロジェクト概要                     |
+| ドキュメント                               | 内容                                 | 重要セクション                   |
+| ------------------------------------------ | ------------------------------------ | -------------------------------- |
+| **[SPECIFICATION.md](./SPECIFICATION.md)** | 技術仕様書（アプリ再現レベルの詳細） | S16-19: ゲーム機能・ロックダウン |
+| **[SETUP_GUIDE.md](./SETUP_GUIDE.md)**     | セットアップ手順                     | -                                |
+| **[PROJECT_INFO.md](./PROJECT_INFO.md)**   | プロジェクト固有情報                 | ロックダウン状態・保護方法       |
+| **[README.md](./README.md)**               | プロジェクト概要                     | -                                |
+
+### 仕様書の主要セクション（SPECIFICATION.md）
+
+| セクション | 内容                                     | 再現に必要な情報                                                                                              |
+| ---------- | ---------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
+| S1-2       | プロジェクト概要・技術スタック           | フレームワーク・パッケージバージョン                                                                          |
+| S3-4       | ディレクトリ構造・フィーチャーベース開発 | アーキテクチャルール                                                                                          |
+| S5         | 設定ファイル仕様                         | tsconfig/next.config/vitest/playwright/tailwind                                                               |
+| S16.1      | ゲームフィーチャー構造                   | ファイル一覧・公開API                                                                                         |
+| S16.2      | 型定義                                   | Suit/CardValue/Card/Guess/GameState/GameResult/RankingEntry                                                   |
+| S16.3      | 定数定義                                 | SUITS/SUIT_EMOJI/SUIT_COLOR/VALUE_DISPLAY/RANKING_DATA/INITIAL_COINS/ANIMATION_DELAY/STORAGE_KEY/TOAST_CONFIG |
+| S16.4      | ゲームロジック                           | useGame全仕様（状態管理・判定ロジック・SSR対応・safeStorage）                                                 |
+| S16.5      | コンポーネント仕様                       | Card/GameBoard/GameButtons/Ranking の完全仕様                                                                 |
+| S16.6-16.9 | UI/UX・データ永続化・ページ構成・テスト  | カラーパレット・localStorage・回帰テスト                                                                      |
+| S17        | シークレットジェスチャー                 | useSecretGesture全仕様・状態遷移図・イベントハンドリング                                                      |
+| S18        | ロックダウン仕様                         | 3層保護・対象ファイル・バイパス方法・テスト仕様                                                               |
+| S19        | デプロイ情報                             | Vercel設定・ページサイズ・パフォーマンス                                                                      |
 
 # ═══════════════════════════════════════════════════
 
