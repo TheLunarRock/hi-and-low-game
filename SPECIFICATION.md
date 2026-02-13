@@ -1850,11 +1850,23 @@ git tag -a v1.1.0 -m "v1.1.0: ゲーム機能更新"
 
 ### 19.2 ページ構成
 
-| ルート        | サイズ  | 種別   | 説明                                 |
-| ------------- | ------- | ------ | ------------------------------------ |
-| `/`           | 4 kB    | Static | ゲームメインページ                   |
-| `/m`          | 3.45 kB | Static | メッセンジャーページ（シークレット） |
-| `/_not-found` | 992 B   | Static | 404ページ                            |
+| ルート                              | 種別    | 説明                                 |
+| ----------------------------------- | ------- | ------------------------------------ |
+| `/`                                 | Static  | ゲームメインページ                   |
+| `/m`                                | Dynamic | トーク一覧（メッセンジャートップ）   |
+| `/m/login`                          | Dynamic | ログインページ                       |
+| `/m/signup`                         | Dynamic | サインアップページ                   |
+| `/m/chat/[conversationId]`          | Dynamic | チャットページ                       |
+| `/m/chat/[conversationId]/settings` | Dynamic | グループ設定ページ                   |
+| `/m/friends`                        | Dynamic | フレンド一覧                         |
+| `/m/friends/add`                    | Dynamic | フレンド追加（QRコード＋コード入力） |
+| `/m/profile`                        | Dynamic | プロフィール・設定                   |
+| `/m/search`                         | Dynamic | メッセージ検索                       |
+| `/m/admin`                          | Dynamic | 管理パネル（admin限定）              |
+| `/m/group/create`                   | Dynamic | グループ作成                         |
+| `/m/group/invite/[code]`            | Dynamic | グループ招待リンク                   |
+| `/m/add/[friendCode]`               | Dynamic | URL経由フレンド追加                  |
+| `/_not-found`                       | Static  | 404ページ                            |
 
 ### 19.3 パフォーマンス
 
@@ -1864,7 +1876,736 @@ git tag -a v1.1.0 -m "v1.1.0: ゲーム機能更新"
 | ビルド時間             | ~3.6秒（コンパイル） |
 | 静的ページ生成         | 5ページ              |
 
+## 20. メッセンジャー機能（LINE風チャットアプリ）
+
+ゲームのシークレットジェスチャー（S17参照）経由でアクセス可能なLINE風メッセージングアプリ。
+Supabaseをバックエンドとして使用し、リアルタイム通信・認証・ストレージを実装。
+
+### 20.1 Supabaseプロジェクト
+
+| 項目                   | 値                                            |
+| ---------------------- | --------------------------------------------- |
+| **プロジェクトID**     | `cyoitqodgybqybciokbx`                        |
+| **リージョン**         | ap-northeast-1（東京）                        |
+| **認証方式**           | Email/Password                                |
+| **Realtime有効**       | messages, conversations, conversation_members |
+| **ストレージバケット** | `message-images`                              |
+
+### 20.2 データベーススキーマ
+
+#### 20.2.1 profiles テーブル
+
+| カラム         | 型          | デフォルト  | NOT NULL | 制約                            |
+| -------------- | ----------- | ----------- | -------- | ------------------------------- |
+| `id`           | uuid        | -           | YES      | PK, FK → auth.users(id) CASCADE |
+| `display_name` | text        | -           | YES      | -                               |
+| `avatar_text`  | text        | `'?'`       | YES      | -                               |
+| `avatar_color` | text        | `'#3B82F6'` | YES      | -                               |
+| `friend_code`  | text        | -           | YES      | UNIQUE                          |
+| `is_admin`     | boolean     | `false`     | YES      | -                               |
+| `created_at`   | timestamptz | `now()`     | YES      | -                               |
+| `updated_at`   | timestamptz | `now()`     | YES      | トリガーで自動更新              |
+
+**インデックス**: `idx_profiles_friend_code(friend_code)`
+
+#### 20.2.2 friendships テーブル
+
+| カラム       | 型          | デフォルト          | NOT NULL | 制約                      |
+| ------------ | ----------- | ------------------- | -------- | ------------------------- |
+| `id`         | uuid        | `gen_random_uuid()` | YES      | PK                        |
+| `user_id`    | uuid        | -                   | YES      | FK → profiles(id) CASCADE |
+| `friend_id`  | uuid        | -                   | YES      | FK → profiles(id) CASCADE |
+| `created_at` | timestamptz | `now()`             | YES      | -                         |
+
+**制約**: `UNIQUE(user_id, friend_id)`, `CHECK(user_id != friend_id)`
+**インデックス**: `idx_friendships_user_id`, `idx_friendships_friend_id`
+**データモデル**: 双方向（A→B追加時にB→Aも同時作成）
+
+#### 20.2.3 conversations テーブル
+
+| カラム        | 型          | デフォルト          | NOT NULL | 制約                           |
+| ------------- | ----------- | ------------------- | -------- | ------------------------------ |
+| `id`          | uuid        | `gen_random_uuid()` | YES      | PK                             |
+| `type`        | text        | -                   | YES      | CHECK: `'direct'` or `'group'` |
+| `name`        | text        | -                   | NO       | グループ名（direct時はNULL）   |
+| `icon_text`   | text        | -                   | NO       | グループアイコン文字           |
+| `icon_color`  | text        | -                   | NO       | グループアイコン色             |
+| `invite_code` | text        | -                   | NO       | UNIQUE, グループ招待コード     |
+| `created_by`  | uuid        | -                   | NO       | FK → profiles(id) SET NULL     |
+| `created_at`  | timestamptz | `now()`             | YES      | -                              |
+| `updated_at`  | timestamptz | `now()`             | YES      | トリガーで自動更新             |
+
+**インデックス**: `idx_conversations_invite_code`, `idx_conversations_type`
+
+#### 20.2.4 conversation_members テーブル
+
+| カラム            | 型          | デフォルト          | NOT NULL | 制約                           |
+| ----------------- | ----------- | ------------------- | -------- | ------------------------------ |
+| `id`              | uuid        | `gen_random_uuid()` | YES      | PK                             |
+| `conversation_id` | uuid        | -                   | YES      | FK → conversations(id) CASCADE |
+| `user_id`         | uuid        | -                   | YES      | FK → profiles(id) CASCADE      |
+| `last_read_at`    | timestamptz | `now()`             | YES      | 既読管理用                     |
+| `joined_at`       | timestamptz | `now()`             | YES      | -                              |
+
+**制約**: `UNIQUE(conversation_id, user_id)`
+**インデックス**: `idx_conversation_members_conversation`, `idx_conversation_members_user`
+
+#### 20.2.5 messages テーブル
+
+| カラム            | 型          | デフォルト          | NOT NULL | 制約                           |
+| ----------------- | ----------- | ------------------- | -------- | ------------------------------ |
+| `id`              | uuid        | `gen_random_uuid()` | YES      | PK                             |
+| `conversation_id` | uuid        | -                   | YES      | FK → conversations(id) CASCADE |
+| `sender_id`       | uuid        | -                   | YES      | FK → profiles(id) CASCADE      |
+| `content`         | text        | -                   | NO       | テキスト本文                   |
+| `image_url`       | text        | -                   | NO       | 画像URL                        |
+| `reply_to_id`     | uuid        | -                   | NO       | FK → messages(id) SET NULL     |
+| `is_deleted`      | boolean     | `false`             | YES      | ソフトデリート                 |
+| `created_at`      | timestamptz | `now()`             | YES      | -                              |
+
+**制約**: `CHECK(content IS NOT NULL OR image_url IS NOT NULL OR is_deleted = TRUE)`
+**インデックス**: `idx_messages_conversation(conversation_id, created_at DESC)`, `idx_messages_sender`, `idx_messages_reply_to WHERE reply_to_id IS NOT NULL`
+
+#### 20.2.6 message_reactions テーブル
+
+| カラム       | 型          | デフォルト          | NOT NULL | 制約                      |
+| ------------ | ----------- | ------------------- | -------- | ------------------------- |
+| `id`         | uuid        | `gen_random_uuid()` | YES      | PK                        |
+| `message_id` | uuid        | -                   | YES      | FK → messages(id) CASCADE |
+| `user_id`    | uuid        | -                   | YES      | FK → profiles(id) CASCADE |
+| `emoji`      | text        | -                   | YES      | CHECK: `'👍'` or `'✅'`   |
+| `created_at` | timestamptz | `now()`             | YES      | -                         |
+
+**制約**: `UNIQUE(message_id, user_id, emoji)`
+**インデックス**: `idx_message_reactions_message`
+
+### 20.3 データベース関数
+
+#### `generate_friend_code() → text`
+
+8文字のランダム文字列を生成。紛らわしい文字（`I`,`l`,`O`,`0`,`1`）を除外。
+
+```sql
+chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789'
+```
+
+#### `handle_new_user() → trigger` (SECURITY DEFINER)
+
+`auth.users` INSERT時に自動実行。ユニークなフレンドコードを生成し、profilesに新規レコードを作成。
+
+- `display_name`: `raw_user_meta_data->>'display_name'` またはデフォルト`'ユーザー'`
+- フレンドコードはLOOPでユニーク性を保証
+
+#### `handle_updated_at() → trigger`
+
+UPDATE時に`updated_at`を`now()`に更新。profiles, conversationsに適用。
+
+#### `is_conversation_member(conv_id uuid) → boolean` (SECURITY DEFINER, STABLE)
+
+指定した会話に`auth.uid()`がメンバーとして参加しているか判定。RLSポリシーの再帰回避に使用。
+
+#### `user_conversation_ids() → SETOF uuid` (SECURITY DEFINER, STABLE)
+
+`auth.uid()`が参加する全会話IDを返す。conversation_members SELECTポリシーで使用。
+
+### 20.4 トリガー
+
+| トリガー名                 | テーブル        | イベント      | 関数                |
+| -------------------------- | --------------- | ------------- | ------------------- |
+| `on_auth_user_created`     | `auth.users`    | AFTER INSERT  | `handle_new_user`   |
+| `on_profiles_updated`      | `profiles`      | BEFORE UPDATE | `handle_updated_at` |
+| `on_conversations_updated` | `conversations` | BEFORE UPDATE | `handle_updated_at` |
+
+### 20.5 RLSポリシー
+
+全テーブルでRLS有効。管理者（`is_admin = true`）はSELECTで全データ閲覧可能。
+
+#### profiles
+
+| ポリシー名            | 操作   | 条件                 |
+| --------------------- | ------ | -------------------- |
+| `profiles_select_all` | SELECT | `true`（全員閲覧可） |
+| `profiles_insert_own` | INSERT | `auth.uid() = id`    |
+| `profiles_update_own` | UPDATE | `auth.uid() = id`    |
+
+#### friendships
+
+| ポリシー名               | 操作   | 条件                                             |
+| ------------------------ | ------ | ------------------------------------------------ |
+| `friendships_select_own` | SELECT | `auth.uid() = user_id OR auth.uid() = friend_id` |
+| `friendships_insert_own` | INSERT | `auth.uid() = user_id OR auth.uid() = friend_id` |
+| `friendships_delete_own` | DELETE | `auth.uid() = user_id OR auth.uid() = friend_id` |
+
+#### conversations
+
+| ポリシー名                    | 操作   | 条件                                     |
+| ----------------------------- | ------ | ---------------------------------------- |
+| `conversations_select_member` | SELECT | `is_conversation_member(id) OR is_admin` |
+| `conversations_insert_auth`   | INSERT | `auth.uid() IS NOT NULL`                 |
+| `conversations_update_member` | UPDATE | `is_conversation_member(id)`             |
+
+#### conversation_members
+
+| ポリシー名                        | 操作   | 条件                                                       |
+| --------------------------------- | ------ | ---------------------------------------------------------- |
+| `conversation_members_select`     | SELECT | `conversation_id IN (user_conversation_ids()) OR is_admin` |
+| `conversation_members_insert`     | INSERT | `auth.uid() IS NOT NULL`                                   |
+| `conversation_members_update_own` | UPDATE | `auth.uid() = user_id`                                     |
+| `conversation_members_delete_own` | DELETE | `auth.uid() = user_id`                                     |
+
+#### messages
+
+| ポリシー名               | 操作   | 条件                                                         |
+| ------------------------ | ------ | ------------------------------------------------------------ |
+| `messages_select_member` | SELECT | `is_conversation_member(conversation_id) OR is_admin`        |
+| `messages_insert_member` | INSERT | `auth.uid() = sender_id AND is_conversation_member(conv_id)` |
+| `messages_update_delete` | UPDATE | `is_conversation_member(conversation_id) OR is_admin`        |
+
+#### message_reactions
+
+| ポリシー名                | 操作   | 条件                                                         |
+| ------------------------- | ------ | ------------------------------------------------------------ |
+| `reactions_select_member` | SELECT | メッセージ所属会話のメンバー（`is_conversation_member`経由） |
+| `reactions_insert_member` | INSERT | `auth.uid() = user_id` かつ会話メンバー                      |
+| `reactions_delete_own`    | DELETE | `auth.uid() = user_id`                                       |
+
+### 20.6 Realtime Publication
+
+```sql
+ALTER PUBLICATION supabase_realtime ADD TABLE messages;
+ALTER PUBLICATION supabase_realtime ADD TABLE conversations;
+ALTER PUBLICATION supabase_realtime ADD TABLE conversation_members;
+```
+
+### 20.7 フィーチャー構造
+
+```
+src/features/messenger/
+├── api/
+│   ├── auth.ts            # 認証API（signUp, login, logout, getCurrentUser, getProfile, updateProfile）
+│   ├── friends.ts         # フレンドAPI（getFriends, addFriendByCode, getProfileByFriendCode, removeFriend）
+│   ├── conversations.ts   # 会話API（getConversations, createDirectConversation, createGroupConversation等）
+│   ├── messages.ts        # メッセージAPI（getMessages, sendMessage, deleteMessage, markAsRead）
+│   ├── reactions.ts       # リアクションAPI（addReaction, removeReaction）
+│   └── storage.ts         # ストレージAPI（uploadImage）
+├── components/
+│   ├── AuthProvider.tsx   # 認証コンテキスト（AuthProvider + useAuthContext）
+│   └── ProfileAvatar.tsx  # アバター表示コンポーネント
+├── hooks/
+│   ├── useAuth.ts         # 認証状態管理フック
+│   ├── useConversations.ts # 会話一覧フック
+│   └── useMessages.ts     # メッセージ管理フック
+├── utils/
+│   └── dateFormat.ts      # 日付フォーマットユーティリティ
+├── constants/
+│   └── index.ts           # 定数定義
+├── types/
+│   └── index.ts           # 型定義
+└── index.ts               # 公開API
+```
+
+### 20.8 型定義
+
+```typescript
+// Database Row Types（Supabase自動生成型から取得）
+type Profile = Database['public']['Tables']['profiles']['Row']
+type Friendship = Database['public']['Tables']['friendships']['Row']
+type Conversation = Database['public']['Tables']['conversations']['Row']
+type ConversationMember = Database['public']['Tables']['conversation_members']['Row']
+type Message = Database['public']['Tables']['messages']['Row']
+type MessageReaction = Database['public']['Tables']['message_reactions']['Row']
+
+// Insert/Update Types
+type ProfileInsert = Database['public']['Tables']['profiles']['Insert']
+type ProfileUpdate = Database['public']['Tables']['profiles']['Update']
+type MessageInsert = Database['public']['Tables']['messages']['Insert']
+type MessageUpdate = Database['public']['Tables']['messages']['Update']
+// 他テーブルも同様にInsert型を定義
+
+// ドメイン型
+type ConversationType = 'direct' | 'group'
+type ReactionEmoji = '👍' | '✅'
+
+interface ConversationWithDetails {
+  readonly conversation: Conversation
+  readonly members: readonly (ConversationMember & { readonly profile: Profile })[]
+  readonly latestMessage: Message | null
+  readonly unreadCount: number
+}
+
+interface MessageWithDetails {
+  readonly message: Message
+  readonly sender: Profile
+  readonly reactions: readonly (MessageReaction & { readonly user: Profile })[]
+  readonly replyTo: (Message & { readonly sender: Profile }) | null
+}
+
+interface AuthState {
+  readonly user: Profile | null
+  readonly isLoading: boolean
+  readonly isAuthenticated: boolean
+}
+
+interface SignUpFormData {
+  readonly email: string
+  readonly password: string
+  readonly displayName: string
+}
+
+interface LoginFormData {
+  readonly email: string
+  readonly password: string
+}
+```
+
+### 20.9 定数定義
+
+| 定数名                   | 値                                                                                  | 説明                   |
+| ------------------------ | ----------------------------------------------------------------------------------- | ---------------------- |
+| `AVATAR_COLORS`          | `['#3B82F6','#EF4444','#10B981','#F59E0B','#8B5CF6','#EC4899','#06B6D4','#F97316']` | アバター色（8色）      |
+| `MESSAGE_MAX_LENGTH`     | `2000`                                                                              | メッセージ最大文字数   |
+| `IMAGE_MAX_SIZE_MB`      | `10`                                                                                | 画像最大MB             |
+| `IMAGE_MAX_SIZE_BYTES`   | `10485760`                                                                          | 画像最大バイト         |
+| `ALLOWED_IMAGE_TYPES`    | `['image/jpeg','image/png','image/gif','image/webp']`                               | 許可画像MIME           |
+| `MESSAGES_PER_PAGE`      | `50`                                                                                | ページネーション数     |
+| `CONVERSATIONS_PER_PAGE` | `50`                                                                                | 会話ページネーション数 |
+| `SOUND_SEND`             | `'/sounds/send.wav'`                                                                | 送信音パス             |
+| `SOUND_RECEIVE`          | `'/sounds/receive.wav'`                                                             | 受信音パス             |
+| `REACTION_EMOJIS`        | `['👍','✅']`                                                                       | リアクション絵文字     |
+| `DATE_TIMEZONE`          | `'Asia/Tokyo'`                                                                      | タイムゾーン           |
+| `FRIEND_CODE_LENGTH`     | `8`                                                                                 | フレンドコード長       |
+| `MESSAGE_IMAGES_BUCKET`  | `'message-images'`                                                                  | ストレージバケット名   |
+
+### 20.10 公開API関数
+
+#### 認証API（api/auth.ts）
+
+| 関数             | 引数                    | 戻り値                 | 説明                                |
+| ---------------- | ----------------------- | ---------------------- | ----------------------------------- |
+| `signUp`         | `SignUpFormData`        | `{ profile: Profile }` | 登録＋プロフィール取得（500ms待機） |
+| `login`          | `email, password`       | `{ profile: Profile }` | ログイン＋プロフィール取得          |
+| `logout`         | -                       | `void`                 | ログアウト                          |
+| `getCurrentUser` | -                       | `Profile \| null`      | 現在ユーザーのプロフィール取得      |
+| `getProfile`     | `userId`                | `Profile \| null`      | プロフィール取得                    |
+| `updateProfile`  | `userId, ProfileUpdate` | `Profile`              | プロフィール更新                    |
+
+#### フレンドAPI（api/friends.ts）
+
+| 関数                     | 引数                 | 戻り値            | 説明                               |
+| ------------------------ | -------------------- | ----------------- | ---------------------------------- |
+| `getFriends`             | `userId`             | `Profile[]`       | フレンド一覧（or条件で双方向取得） |
+| `addFriendByCode`        | `userId, friendCode` | `Profile`         | フレンドコードで追加（双方向作成） |
+| `getProfileByFriendCode` | `friendCode`         | `Profile \| null` | フレンドコードからプロフィール検索 |
+| `removeFriend`           | `userId, friendId`   | `void`            | フレンド削除（双方向削除）         |
+
+**addFriendByCodeのバリデーション**:
+
+1. フレンドコード存在確認 → Error: `"フレンドコードが見つかりません"`
+2. 自分自身チェック → Error: `"自分自身をフレンドに追加できません"`
+3. 既存フレンドチェック → Error: `"既にフレンドです"`
+4. 双方向フレンドシップ作成（2レコード: `userId→friendId` + `friendId→userId`）
+
+#### 会話API（api/conversations.ts）
+
+| 関数                       | 引数                                           | 戻り値                      | 説明                         |
+| -------------------------- | ---------------------------------------------- | --------------------------- | ---------------------------- |
+| `getConversations`         | `userId`                                       | `ConversationWithDetails[]` | 会話一覧（updated_at DESC）  |
+| `getConversation`          | `conversationId`                               | `Conversation \| null`      | 会話詳細取得                 |
+| `createDirectConversation` | `userId, friendId`                             | `Conversation`              | DM作成（既存あれば返却）     |
+| `createGroupConversation`  | `userId, name, iconText, iconColor, memberIds` | `Conversation`              | グループ作成＋招待コード生成 |
+| `joinGroupByInviteCode`    | `userId, inviteCode`                           | `Conversation`              | 招待コードでグループ参加     |
+| `leaveConversation`        | `userId, conversationId`                       | `void`                      | 会話から退出                 |
+| `updateGroup`              | `conversationId, updates`                      | `Conversation`              | グループ情報更新             |
+
+**getConversationsの処理**:
+
+1. `conversation_members`から自分の会話ID取得
+2. `conversations`を`updated_at DESC`で取得（limit 50）
+3. メンバー＋プロフィールをJOIN取得
+4. 各会話に対して最新メッセージ・未読数を計算
+
+**未読数の計算**: `messages WHERE created_at > last_read_at AND sender_id != userId` のCOUNT
+
+#### メッセージAPI（api/messages.ts）
+
+| 関数            | 引数                                                        | 戻り値                 | 説明                                                            |
+| --------------- | ----------------------------------------------------------- | ---------------------- | --------------------------------------------------------------- |
+| `getMessages`   | `conversationId, cursor?`                                   | `MessageWithDetails[]` | メッセージ取得（カーソルページネーション）                      |
+| `sendMessage`   | `conversationId, senderId, content?, imageUrl?, replyToId?` | `Message`              | メッセージ送信＋updated_at更新                                  |
+| `deleteMessage` | `messageId`                                                 | `void`                 | ソフトデリート（is_deleted=true, content=null, image_url=null） |
+| `markAsRead`    | `conversationId, userId`                                    | `void`                 | last_read_atを現在時刻に更新                                    |
+
+**getMessagesの処理**:
+
+1. `messages`にsender(profiles)とreactions(message_reactions+profiles)をJOIN
+2. `created_at DESC`で取得、limit 50
+3. cursor指定時は`created_at < cursor`でフィルタ
+4. `reply_to_id`が存在するメッセージの返信先を別クエリで取得（PostgREST self-referencing FK非対応のため）
+5. 結果を昇順（時系列）に並べ替えて返す
+
+#### リアクションAPI（api/reactions.ts）
+
+| 関数             | 引数                       | 戻り値            | 説明             |
+| ---------------- | -------------------------- | ----------------- | ---------------- |
+| `addReaction`    | `messageId, userId, emoji` | `MessageReaction` | リアクション追加 |
+| `removeReaction` | `messageId, userId, emoji` | `void`            | リアクション削除 |
+
+#### ストレージAPI（api/storage.ts）
+
+| 関数          | 引数           | 戻り値   | 説明                          |
+| ------------- | -------------- | -------- | ----------------------------- |
+| `uploadImage` | `file, userId` | `string` | 画像アップロード、公開URL返却 |
+
+**パス**: `{userId}/{timestamp}.{ext}` → `message-images`バケット
+
+### 20.11 内部フック（非公開）
+
+#### useAuth
+
+**状態**: `user`, `isLoading`, `isAuthenticated`, `error`
+**メソッド**: `signUp`, `login`, `logout`, `updateProfile`, `clearError`
+
+**初期化処理**:
+
+1. `supabase.auth.getUser()`で現在セッション確認
+2. `supabase.auth.onAuthStateChange()`でリアルタイム監視
+3. `SIGNED_IN` → profilesテーブルから取得
+4. `SIGNED_OUT` → user = null
+
+**signUp処理**:
+
+1. `supabase.auth.signUp()` → 1000ms待機（トリガーのプロフィール作成待ち）
+2. avatarColor指定時 → profilesテーブル更新
+3. プロフィール取得して状態更新
+
+#### useConversations
+
+**パラメータ**: `userId: string | null`
+**状態**: `conversations`, `isLoading`, `error`
+**メソッド**: `refresh`
+
+**Realtimeチャネル**: `'conversations-realtime'`
+
+- INSERT on messages → 一覧再取得
+- UPDATE on conversations → 一覧再取得
+
+#### useMessages
+
+**パラメータ**: `conversationId: string | null, userId: string | null`
+**状態**: `messages`, `isLoading`, `error`, `hasMore`
+**メソッド**: `loadMore`, `send`
+
+**Realtimeチャネル**: `'messages-${conversationId}'`
+
+- INSERT on messages → `buildRealtimeMsg()`でMessageWithDetails構築 → 追加 → 他ユーザーなら`markAsRead`
+- UPDATE on messages → `applyMsgUpdate()`で更新
+- ANY on message_reactions → 全メッセージ再取得
+
+**ページネーション**: 最古メッセージの`created_at`をcursorとして使用。`hasMore = messages.length >= MESSAGES_PER_PAGE`
+
+### 20.12 内部コンポーネント（非公開）
+
+#### AuthProvider（公開例外）
+
+`useAuth`フックから認証状態を取得し、`AuthContext.Provider`でwrap。
+`useAuthContext()`でコンテキスト取得（Provider外では Error throw）。
+
+#### ProfileAvatar
+
+**Props**: `text: string, color: string, size?: 'sm' | 'md' | 'lg'`
+
+| サイズ | クラス              |
+| ------ | ------------------- |
+| `sm`   | `w-8 h-8 text-xs`   |
+| `md`   | `w-10 h-10 text-sm` |
+| `lg`   | `w-16 h-16 text-xl` |
+
+### 20.13 日付フォーマットユーティリティ
+
+全てAsia/Tokyoタイムゾーン固定。
+
+| 関数                     | 用途                     | 出力例                                           |
+| ------------------------ | ------------------------ | ------------------------------------------------ |
+| `formatMessageTime`      | メッセージ時刻（HH:MM）  | `"14:30"`                                        |
+| `formatDateSeparator`    | 日付セパレータ           | `"2026年2月13日(木)"`                            |
+| `formatConversationTime` | 会話一覧時刻（相対表示） | 今日→`"14:30"`, 昨日→`"昨日"`, それ以前→`"2/13"` |
+| `isSameDay`              | 同日判定                 | `true / false`                                   |
+
+### 20.14 ページ構成
+
+#### 20.14.1 レイアウト（`src/app/m/layout.tsx`）
+
+```
+AuthProvider
+  └── MessengerLayoutInner
+      ├── Global Realtime Subscription（通知・バッジ）
+      ├── Auth Guard（非公開ページでの認証チェック）
+      ├── Children（各ページ）
+      └── BottomNavigation（条件付き表示）
+```
+
+**公開パス**（認証不要）: `/m/login`, `/m/signup`, `/m/add/*`, `/m/group/invite/*`
+**BottomNav非表示**: ログイン・サインアップ・チャットページ
+
+**BottomNavigation タブ**:
+
+| パス         | ラベル   | アイコン | マッチング |
+| ------------ | -------- | -------- | ---------- |
+| `/m`         | トーク   | 🗨️       | exact      |
+| `/m/friends` | フレンド | 👥       | prefix     |
+| `/m/profile` | マイ     | 👤       | prefix     |
+
+**グローバル通知サブスクリプション**:
+
+- チャネル: `'global-notifications'`
+- INSERT on messages → `refreshAndNotify()` → バッジ更新 + ブラウザ通知
+- UPDATE on conversations → `refreshAndNotify()` → バッジ更新
+- ブラウザ通知: `new Notification(senderName, { body, icon: '/icon-192.png', tag: 'messenger-message' })`
+- PWAバッジ: `navigator.setAppBadge(totalUnread)` / `navigator.clearAppBadge()`
+
+#### 20.14.2 トーク一覧（`src/app/m/page.tsx`）
+
+**ルート**: `/m`
+
+**UI構成**:
+
+1. **ヘッダー**: タイトル「トーク」+ 検索アイコン + 新規チャットボタン
+2. **通知バナー**: 通知許可状態に応じて表示
+   - `'default'` → 「通知を有効にしますか？」+ 許可ボタン
+   - `'denied'` → ブロック解除手順（iPhone/PC）
+3. **会話リスト**: `ConversationItem`コンポーネント
+   - アバター（色+テキスト2文字）
+   - 表示名（DM: 相手名, グループ: グループ名）
+   - 最終メッセージプレビュー（削除済み→「メッセージが削除されました」, 画像→「📷 画像」）
+   - 相対時刻（今日: HH:MM, 昨日, M/D）
+   - 未読バッジ（青, 最大99+）
+4. **新規チャットモーダル**: フレンド選択 + 「グループを作成」ボタン
+
+**Realtime**: `'talk-list-refresh'`チャネルで会話一覧の自動更新
+
+#### 20.14.3 ログイン（`src/app/m/login/page.tsx`）
+
+**ルート**: `/m/login`
+
+**UI**: グラデーション背景（blue-500→blue-700）、フォームカード、email/password入力、エラー表示
+**処理**: `login()` → 成功時 `/m` へ遷移
+
+#### 20.14.4 サインアップ（`src/app/m/signup/page.tsx`）
+
+**ルート**: `/m/signup`
+
+**2段階フォーム**:
+
+1. **認証情報**: email + password
+2. **プロフィール**: display_name（max 20文字）+ アバター色選択（AVATAR_COLORS）+ プレビュー
+
+**処理**: `signUp()` → 成功時 `/m` へ遷移
+
+#### 20.14.5 チャット（`src/app/m/chat/[conversationId]/page.tsx`）
+
+**ルート**: `/m/chat/{conversationId}`
+
+**UI構成**:
+
+1. **ヘッダー**: 戻るボタン + 会話名 + 設定アイコン（グループのみ）
+2. **メッセージエリア**: スクロール可能、上部に「もっと読む」ボタン
+3. **メッセージバブル**: `MessageBubble`コンポーネント
+   - 送信者アバター（左）、送信者名（グループのみ）、本文、時刻、リアクション
+   - 返信先プレビュー（青ボーダー、引用メッセージ）
+   - 画像表示（タップでフルスクリーンプレビュー）
+   - コンテキストメニュー（長押し500ms or 右クリック）
+4. **返信バー**: 返信時にメッセージ入力上部に表示
+5. **入力バー**: 画像ボタン + textarea + 送信ボタン
+
+**カラーパレット**:
+
+- チャット背景: `bg-[#8CABD9]`
+- 送信メッセージ: `bg-[#A8D97A]`（右寄せ）
+- 受信メッセージ: `bg-white`（左寄せ）
+
+**コンテキストメニュー**: リアクション選択 + 返信 + 削除（自分のメッセージのみ）
+
+**サウンド**: 送信時`send.wav`、受信時`receive.wav`
+
+**Realtime**: `'messages-${conversationId}'`チャネル
+
+- INSERT → メッセージ追加 + サウンド + 既読マーク
+- UPDATE → メッセージ内容更新
+- message_reactions ANY → 全メッセージ再取得
+
+#### 20.14.6 グループ設定（`src/app/m/chat/[conversationId]/settings/page.tsx`）
+
+**ルート**: `/m/chat/{conversationId}/settings`
+
+**セクション**:
+
+1. グループアイコン + グループ名
+2. 招待リンク（コピー機能付き）
+3. メンバー一覧（追加ボタン付き）
+4. メンバー追加モーダル（フレンドから選択、既存メンバー除外）
+5. グループ退出ボタン（確認ダイアログ付き）
+
+#### 20.14.7 フレンド一覧（`src/app/m/friends/page.tsx`）
+
+**ルート**: `/m/friends`
+
+**UI**: フレンドリスト（アバター + 名前 + メッセージアイコン）
+**操作**: フレンドタップ → `createDirectConversation()` → チャットへ遷移
+
+#### 20.14.8 フレンド追加（`src/app/m/friends/add/page.tsx`）
+
+**ルート**: `/m/friends/add`
+
+**2セクション**:
+
+1. **マイQRコード**: QRコード（180x180, level M）+ フレンドコード + コピーボタン
+   - QRコードURL: `${origin}/m/add/{friend_code}`
+2. **コードで追加**: 入力フィールド（max 20文字）+ 追加ボタン
+
+#### 20.14.9 プロフィール（`src/app/m/profile/page.tsx`）
+
+**ルート**: `/m/profile`
+
+**表示モード**: アバター + 名前 + フレンドコード + 編集ボタン + 通知トグル + ログアウト
+**編集モード**: 名前入力（max 20）+ 色選択（AVATAR_COLORS）+ 保存/キャンセル
+**管理者パネルリンク**: `is_admin = true`の場合のみ表示
+
+**通知トグル**: `NotificationToggle`コンポーネント（iOS PWA対応ガイド付き）
+
+#### 20.14.10 メッセージ検索（`src/app/m/search/page.tsx`）
+
+**ルート**: `/m/search`
+
+**検索フロー**:
+
+1. 検索入力（自動フォーカス）
+2. 300msデバウンス
+3. 2文字以上で検索実行
+4. `messages`テーブルの`content`をilike検索（最大50件）
+5. 結果にハイライト表示
+
+#### 20.14.11 管理パネル（`src/app/m/admin/page.tsx`）
+
+**ルート**: `/m/admin`（`is_admin = true`のみアクセス可能）
+
+**ダッシュボード**:
+
+- 統計カード: ユーザー数・会話数・メッセージ数
+- 会話リスト: タイプフィルタ（Group/DM）、メンバー数表示
+- メッセージパネル: 選択した会話の全メッセージ表示、削除機能
+
+#### 20.14.12 グループ作成（`src/app/m/group/create/page.tsx`）
+
+**ルート**: `/m/group/create`
+
+**フォーム**: グループ名（required, max 30）+ アイコンテキスト（1-2文字, auto: name.slice(0,2)）+ 色選択 + フレンド選択（チェックボックス）
+**処理**: `createGroupConversation()` → チャットへ遷移
+
+#### 20.14.13 グループ招待（`src/app/m/group/invite/[code]/page.tsx`）
+
+**ルート**: `/m/group/invite/{code}`（認証不要）
+
+**状態**: loading → not-found / error / loaded
+**loaded時のアクション**: 未ログイン→ログインリンク、既にメンバー→チャットリンク、参加可能→参加ボタン
+
+#### 20.14.14 URL経由フレンド追加（`src/app/m/add/[friendCode]/page.tsx`）
+
+**ルート**: `/m/add/{friendCode}`（認証不要）
+
+**UI**: ターゲットプロフィールカード + 追加ボタン
+**チェック**: 未ログイン→ログインリンク、自分自身→メッセージ表示、追加済み→成功メッセージ（1.5秒後にフレンド一覧へ遷移）
+
+### 20.15 通知システム
+
+#### ブラウザ通知
+
+```typescript
+function showBrowserNotification(title: string, body: string): void {
+  if (typeof Notification === 'undefined' || Notification.permission !== 'granted') return
+  const notification = new Notification(title, {
+    body,
+    icon: '/icon-192.png',
+    tag: 'messenger-message',
+  })
+  notification.onclick = () => {
+    window.focus()
+    notification.close()
+  }
+}
+```
+
+**発火条件**: 他ユーザーからのメッセージINSERT（自分の送信メッセージは除外）
+**タイトル**: 送信者名（キャッシュされた会話データから検索）
+**本文**: 画像→「📷 画像」、テキスト→メッセージ内容
+
+#### PWAバッジ
+
+```typescript
+function updateAppBadge(count: number): void {
+  if (!('setAppBadge' in navigator)) return
+  if (count > 0) {
+    void (navigator as Navigator & { setAppBadge: (n: number) => Promise<void> }).setAppBadge(count)
+  } else {
+    void (navigator as Navigator & { clearAppBadge: () => Promise<void> }).clearAppBadge()
+  }
+}
+```
+
+**更新タイミング**: メッセージINSERT時・会話UPDATE時に全未読数を再計算
+
+#### 通知権限バナー
+
+| 状態            | 表示                                                        |
+| --------------- | ----------------------------------------------------------- |
+| `'default'`     | 青バナー: 「通知を有効にしますか？」+ 許可ボタン            |
+| `'denied'`      | 琥珀バナー: ブロック解除手順（iPhone設定 / PCブラウザ設定） |
+| `'granted'`     | 非表示                                                      |
+| `'unsupported'` | 非表示                                                      |
+
+#### iOS PWA制限事項
+
+- HTTPS必須（開発環境HTTP不可）
+- iOS 16.4+
+- 「ホーム画面に追加」経由でインストール必須
+- 通知設定はiOS設定アプリから変更
+
+### 20.16 サウンドエフェクト
+
+| ファイル              | 用途             | 再生タイミング                   |
+| --------------------- | ---------------- | -------------------------------- |
+| `/sounds/send.wav`    | メッセージ送信音 | `sendMessage()`成功時            |
+| `/sounds/receive.wav` | メッセージ受信音 | 他ユーザーからのメッセージ受信時 |
+
+再生方法: `new Audio(path).play()` （失敗時はサイレント）
+
+### 20.17 マイグレーション一覧
+
+| バージョン       | 名前                               | 概要                                                         |
+| ---------------- | ---------------------------------- | ------------------------------------------------------------ |
+| `20260213144729` | `create_profiles_table`            | profilesテーブル＋RLS＋関数＋トリガー                        |
+| `20260213144739` | `create_friendships_table`         | friendshipsテーブル＋RLS                                     |
+| `20260213144813` | `create_conversations_and_members` | conversations＋conversation_members＋RLS                     |
+| `20260213144826` | `create_messages_table`            | messagesテーブル＋RLS＋Realtime                              |
+| `20260213144836` | `create_message_reactions_table`   | message_reactionsテーブル＋RLS＋Realtime                     |
+| `20260213165421` | `fix_function_search_path`         | 全関数にSET search_path = ''追加                             |
+| `20260213171820` | `fix_rls_policies`                 | friendships INSERT双方向化＋RLSバグ修正                      |
+| `20260213172513` | `fix_rls_infinite_recursion`       | `is_conversation_member()`関数導入＋RLS再帰修正              |
+| `20260213172529` | `optimize_messages_rls_policies`   | messages/reactions RLSを`is_conversation_member`使用に最適化 |
+| `20260213172922` | `fix_conversation_members_select`  | `user_conversation_ids()`関数導入＋メンバーSELECT修正        |
+| `20260213173344` | `add_conversations_to_realtime`    | conversations＋conversation_membersをRealtime追加            |
+
+### 20.18 RLS設計の注意点
+
+PostgRESTにおけるRLSポリシーの再帰問題を解決するために`SECURITY DEFINER`関数を使用:
+
+1. **conversation_members SELECT** → **conversation_members参照** = 再帰
+   → `user_conversation_ids()` SECURITY DEFINER関数で回避
+2. **conversations SELECT** → **conversation_members参照** → **conversation_members SELECT RLS** = 再帰
+   → `is_conversation_member()` SECURITY DEFINER関数で回避
+3. **messages SELECT** → **conversation_members参照** → 同上
+   → `is_conversation_member()` SECURITY DEFINER関数で回避
+
 ---
 
-**最終更新**: 2026-02-10
-**バージョン**: 4.1.0（アプリ再現レベル詳細化）
+**最終更新**: 2026-02-13
+**バージョン**: 5.0.0（メッセンジャー機能追加）

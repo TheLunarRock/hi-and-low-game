@@ -2,29 +2,36 @@
 
 ## 📚 参照ドキュメント
 
-| ドキュメント                               | 内容                                 | 重要セクション                   |
-| ------------------------------------------ | ------------------------------------ | -------------------------------- |
-| **[SPECIFICATION.md](./SPECIFICATION.md)** | 技術仕様書（アプリ再現レベルの詳細） | S16-19: ゲーム機能・ロックダウン |
-| **[SETUP_GUIDE.md](./SETUP_GUIDE.md)**     | セットアップ手順                     | -                                |
-| **[PROJECT_INFO.md](./PROJECT_INFO.md)**   | プロジェクト固有情報                 | ロックダウン状態・保護方法       |
-| **[README.md](./README.md)**               | プロジェクト概要                     | -                                |
+| ドキュメント                               | 内容                                 | 重要セクション                          |
+| ------------------------------------------ | ------------------------------------ | --------------------------------------- |
+| **[SPECIFICATION.md](./SPECIFICATION.md)** | 技術仕様書（アプリ再現レベルの詳細） | S16-19: ゲーム機能, S20: メッセンジャー |
+| **[SETUP_GUIDE.md](./SETUP_GUIDE.md)**     | セットアップ手順                     | -                                       |
+| **[PROJECT_INFO.md](./PROJECT_INFO.md)**   | プロジェクト固有情報                 | ロックダウン状態・保護方法              |
+| **[README.md](./README.md)**               | プロジェクト概要                     | -                                       |
 
 ### 仕様書の主要セクション（SPECIFICATION.md）
 
-| セクション | 内容                                     | 再現に必要な情報                                                                                              |
-| ---------- | ---------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
-| S1-2       | プロジェクト概要・技術スタック           | フレームワーク・パッケージバージョン                                                                          |
-| S3-4       | ディレクトリ構造・フィーチャーベース開発 | アーキテクチャルール                                                                                          |
-| S5         | 設定ファイル仕様                         | tsconfig/next.config/vitest/playwright/tailwind                                                               |
-| S16.1      | ゲームフィーチャー構造                   | ファイル一覧・公開API                                                                                         |
-| S16.2      | 型定義                                   | Suit/CardValue/Card/Guess/GameState/GameResult/RankingEntry                                                   |
-| S16.3      | 定数定義                                 | SUITS/SUIT_EMOJI/SUIT_COLOR/VALUE_DISPLAY/RANKING_DATA/INITIAL_COINS/ANIMATION_DELAY/STORAGE_KEY/TOAST_CONFIG |
-| S16.4      | ゲームロジック                           | useGame全仕様（状態管理・判定ロジック・SSR対応・safeStorage）                                                 |
-| S16.5      | コンポーネント仕様                       | Card/GameBoard/GameButtons/Ranking の完全仕様                                                                 |
-| S16.6-16.9 | UI/UX・データ永続化・ページ構成・テスト  | カラーパレット・localStorage・回帰テスト                                                                      |
-| S17        | シークレットジェスチャー                 | useSecretGesture全仕様・状態遷移図・イベントハンドリング                                                      |
-| S18        | ロックダウン仕様                         | 3層保護・対象ファイル・バイパス方法・テスト仕様                                                               |
-| S19        | デプロイ情報                             | Vercel設定・ページサイズ・パフォーマンス                                                                      |
+| セクション | 内容                                       | 再現に必要な情報                                                                                              |
+| ---------- | ------------------------------------------ | ------------------------------------------------------------------------------------------------------------- |
+| S1-2       | プロジェクト概要・技術スタック             | フレームワーク・パッケージバージョン                                                                          |
+| S3-4       | ディレクトリ構造・フィーチャーベース開発   | アーキテクチャルール                                                                                          |
+| S5         | 設定ファイル仕様                           | tsconfig/next.config/vitest/playwright/tailwind                                                               |
+| S16.1      | ゲームフィーチャー構造                     | ファイル一覧・公開API                                                                                         |
+| S16.2      | 型定義                                     | Suit/CardValue/Card/Guess/GameState/GameResult/RankingEntry                                                   |
+| S16.3      | 定数定義                                   | SUITS/SUIT_EMOJI/SUIT_COLOR/VALUE_DISPLAY/RANKING_DATA/INITIAL_COINS/ANIMATION_DELAY/STORAGE_KEY/TOAST_CONFIG |
+| S16.4      | ゲームロジック                             | useGame全仕様（状態管理・判定ロジック・SSR対応・safeStorage）                                                 |
+| S16.5      | コンポーネント仕様                         | Card/GameBoard/GameButtons/Ranking の完全仕様                                                                 |
+| S16.6-16.9 | UI/UX・データ永続化・ページ構成・テスト    | カラーパレット・localStorage・回帰テスト                                                                      |
+| S17        | シークレットジェスチャー                   | useSecretGesture全仕様・状態遷移図・イベントハンドリング                                                      |
+| S18        | ロックダウン仕様                           | 3層保護・対象ファイル・バイパス方法・テスト仕様                                                               |
+| S19        | デプロイ情報                               | Vercel設定・ページサイズ・パフォーマンス                                                                      |
+| S20.1-20.2 | メッセンジャー概要・DBスキーマ             | Supabase設定・6テーブル定義・カラム・制約・インデックス                                                       |
+| S20.3-20.6 | DB関数・トリガー・RLS・Realtime            | 5関数・3トリガー・19 RLSポリシー・Realtime Publication                                                        |
+| S20.7-20.9 | フィーチャー構造・型定義・定数             | ディレクトリ構成・TypeScript型・13定数                                                                        |
+| S20.10     | 公開API関数                                | 認証6・フレンド4・会話7・メッセージ4・リアクション2・ストレージ1                                              |
+| S20.11-13  | 内部フック・コンポーネント・ユーティリティ | useAuth/useConversations/useMessages・AuthProvider・dateFormat                                                |
+| S20.14     | ページ構成（14ページ）                     | レイアウト・トーク一覧・チャット・設定・フレンド・検索・管理パネル等                                          |
+| S20.15-18  | 通知・サウンド・マイグレーション・RLS設計  | ブラウザ通知・PWAバッジ・11マイグレーション・SECURITY DEFINER再帰回避                                         |
 
 # ═══════════════════════════════════════════════════
 
