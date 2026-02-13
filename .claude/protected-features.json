@@ -6,7 +6,7 @@
       "paths": [
         "src/features/game/",
         "src/app/page.tsx",
-        "src/app/m/",
+        "src/app/m/page.tsx",
         "src/components/ErrorBoundary.tsx"
       ],
       "protection": "strict",

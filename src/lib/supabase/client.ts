@@ -2,22 +2,33 @@
 
 import { createClient } from '@supabase/supabase-js'
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+import type { Database } from './database.types'
 
-if (
-  supabaseUrl === undefined ||
-  supabaseUrl === '' ||
-  supabaseAnonKey === undefined ||
-  supabaseAnonKey === ''
-) {
-  throw new Error(
-    'Missing Supabase environment variables. Please set NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY in your .env.local file.'
-  )
+function getSupabaseConfig(): { url: string; key: string } {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL
+  const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+
+  if (url === undefined || url === '' || key === undefined || key === '') {
+    throw new Error(
+      'Missing Supabase environment variables. Please set NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY in your .env.local file.'
+    )
+  }
+
+  return { url, key }
 }
 
+const config = getSupabaseConfig()
+
 /**
- * Supabase client for client-side usage
- * Use this in React components and client-side code
+ * Supabase client singleton for client-side usage.
+ * Module-level instantiation ensures a single GoTrue instance in React.
  */
-export const supabase = createClient(supabaseUrl, supabaseAnonKey)
+export const supabase = createClient<Database>(config.url, config.key)
+
+/**
+ * Returns the singleton Supabase client.
+ * Backward-compatible factory function alias.
+ */
+export function createBrowserClient() {
+  return supabase
+}

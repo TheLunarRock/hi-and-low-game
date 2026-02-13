@@ -1,5 +1,7 @@
 import { createClient } from '@supabase/supabase-js'
 
+import type { Database } from './database.types'
+
 /**
  * Create a Supabase client for server-side usage
  * Use this in Server Components, Route Handlers, and Server Actions
@@ -19,5 +21,5 @@ export function createServerSupabaseClient() {
     )
   }
 
-  return createClient(supabaseUrl, supabaseAnonKey)
+  return createClient<Database>(supabaseUrl, supabaseAnonKey)
 }

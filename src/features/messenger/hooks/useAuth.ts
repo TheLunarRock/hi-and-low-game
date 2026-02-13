@@ -1,0 +1,252 @@
+'use client'
+
+import { useState, useEffect, useCallback, useMemo } from 'react'
+import { supabase } from '@/lib/supabase'
+import type { Profile, AuthState } from '../types'
+
+interface UseAuthReturn extends AuthState {
+  signUp: (
+    email: string,
+    password: string,
+    displayName: string,
+    avatarColor?: string
+  ) => Promise<void>
+  login: (email: string, password: string) => Promise<void>
+  logout: () => Promise<void>
+  updateProfile: (updates: {
+    display_name?: string
+    avatar_color?: string
+    avatar_text?: string
+  }) => Promise<void>
+  error: string | null
+  clearError: () => void
+}
+
+export function useAuth(): UseAuthReturn {
+  const [user, setUser] = useState<Profile | null>(null)
+  const [isLoading, setIsLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+
+  // Check current session on mount
+  useEffect(() => {
+    let isMounted = true
+
+    async function checkSession() {
+      try {
+        const {
+          data: { user: authUser },
+        } = await supabase.auth.getUser()
+
+        if (authUser !== null && isMounted) {
+          const { data: profile } = await supabase
+            .from('profiles')
+            .select('*')
+            .eq('id', authUser.id)
+            .single()
+
+          // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- isMounted can change across await
+          if (isMounted) {
+            setUser(profile ?? null)
+          }
+        }
+      } catch {
+        // Session check failed silently
+      } finally {
+        if (isMounted) {
+          setIsLoading(false)
+        }
+      }
+    }
+
+    void checkSession()
+
+    // Listen for auth changes
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange(async (event, session) => {
+      if (!isMounted) return
+
+      if (event === 'SIGNED_IN' && session?.user !== undefined) {
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('*')
+          .eq('id', session.user.id)
+          .single()
+
+        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- isMounted can change across await
+        if (isMounted) {
+          setUser(profile ?? null)
+          setIsLoading(false)
+        }
+      } else if (event === 'SIGNED_OUT') {
+        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- isMounted can change across await
+        if (isMounted) {
+          setUser(null)
+          setIsLoading(false)
+        }
+      }
+    })
+
+    return () => {
+      isMounted = false
+      subscription.unsubscribe()
+    }
+  }, [])
+
+  const handleSignUp = useCallback(
+    async (email: string, password: string, displayName: string, avatarColor?: string) => {
+      setError(null)
+      setIsLoading(true)
+      try {
+        const { data: authData, error: authError } = await supabase.auth.signUp({
+          email,
+          password,
+          options: {
+            data: { display_name: displayName },
+          },
+        })
+
+        if (authError) {
+          throw new Error(authError.message)
+        }
+
+        if (authData.user === null) {
+          throw new Error('登録に失敗しました')
+        }
+
+        // Wait for trigger to create profile
+        await new Promise((resolve) => setTimeout(resolve, 1000))
+
+        // If custom avatar color provided, update profile
+        if (avatarColor !== undefined) {
+          const { data: updatedProfile } = await supabase
+            .from('profiles')
+            .update({ avatar_color: avatarColor })
+            .eq('id', authData.user.id)
+            .select('*')
+            .single()
+
+          if (updatedProfile !== null) {
+            setUser(updatedProfile)
+            return
+          }
+        }
+
+        // Fetch profile with trigger defaults
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('*')
+          .eq('id', authData.user.id)
+          .single()
+
+        setUser(profile ?? null)
+      } catch (err) {
+        const message = err instanceof Error ? err.message : '登録に失敗しました'
+        setError(message)
+        throw err
+      } finally {
+        setIsLoading(false)
+      }
+    },
+    []
+  )
+
+  const handleLogin = useCallback(async (email: string, password: string) => {
+    setError(null)
+    setIsLoading(true)
+    try {
+      const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      })
+
+      if (authError) {
+        throw new Error(authError.message)
+      }
+
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', authData.user.id)
+        .single()
+
+      setUser(profile ?? null)
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'ログインに失敗しました'
+      setError(message)
+      throw err
+    } finally {
+      setIsLoading(false)
+    }
+  }, [])
+
+  const handleLogout = useCallback(async () => {
+    setError(null)
+    try {
+      const { error: signOutError } = await supabase.auth.signOut()
+      if (signOutError) {
+        throw new Error(signOutError.message)
+      }
+      setUser(null)
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'ログアウトに失敗しました'
+      setError(message)
+    }
+  }, [])
+
+  const handleUpdateProfile = useCallback(
+    async (updates: { display_name?: string; avatar_color?: string; avatar_text?: string }) => {
+      if (user === null) return
+      setError(null)
+      try {
+        const { data: profile, error: updateError } = await supabase
+          .from('profiles')
+          .update(updates)
+          .eq('id', user.id)
+          .select('*')
+          .single()
+
+        if (updateError) {
+          throw new Error('プロフィールの更新に失敗しました')
+        }
+
+        setUser(profile)
+      } catch (err) {
+        const message = err instanceof Error ? err.message : 'プロフィールの更新に失敗しました'
+        setError(message)
+      }
+    },
+    [user]
+  )
+
+  const clearError = useCallback(() => {
+    setError(null)
+  }, [])
+
+  const isAuthenticated = user !== null
+
+  return useMemo(
+    () => ({
+      user,
+      isLoading,
+      isAuthenticated,
+      signUp: handleSignUp,
+      login: handleLogin,
+      logout: handleLogout,
+      updateProfile: handleUpdateProfile,
+      error,
+      clearError,
+    }),
+    [
+      user,
+      isLoading,
+      isAuthenticated,
+      handleSignUp,
+      handleLogin,
+      handleLogout,
+      handleUpdateProfile,
+      error,
+      clearError,
+    ]
+  )
+}
