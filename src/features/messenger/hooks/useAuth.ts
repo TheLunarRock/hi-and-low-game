@@ -149,6 +149,8 @@ export function useAuth(): UseAuthReturn {
           throw new Error('登録に失敗しました')
         }
 
+        setAuthCookie(true)
+
         // Wait for trigger to create profile
         await new Promise((resolve) => setTimeout(resolve, 1000))
 
@@ -199,6 +201,8 @@ export function useAuth(): UseAuthReturn {
         throw new Error(authError.message)
       }
 
+      setAuthCookie(true)
+
       const { data: profile } = await supabase
         .from('profiles')
         .select('*')
@@ -218,6 +222,7 @@ export function useAuth(): UseAuthReturn {
   const handleLogout = useCallback(async () => {
     setError(null)
     try {
+      setAuthCookie(false)
       const { error: signOutError } = await supabase.auth.signOut()
       if (signOutError) {
         throw new Error(signOutError.message)
