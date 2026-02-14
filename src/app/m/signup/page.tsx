@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, type FormEvent } from 'react'
+import { useState, type FormEvent } from 'react'
 import Link from 'next/link'
 import { supabase } from '@/lib/supabase'
 import { AVATAR_COLORS } from '@/features/messenger'
@@ -18,11 +18,6 @@ export default function SignUpPage() {
   const [error, setError] = useState<string | null>(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
 
-  // Clear any stale session to release Supabase internal auth lock
-  useEffect(() => {
-    void supabase.auth.signOut()
-  }, [])
-
   function handleCredentials(e: FormEvent<HTMLFormElement>) {
     e.preventDefault()
     setStep('profile')
@@ -34,6 +29,9 @@ export default function SignUpPage() {
     setIsSubmitting(true)
 
     try {
+      // Clear any stale session first (awaited to ensure lock is released)
+      await supabase.auth.signOut()
+
       const { data: authData, error: authError } = await supabase.auth.signUp({
         email,
         password,
@@ -63,12 +61,9 @@ export default function SignUpPage() {
         .update({ avatar_color: selectedColor })
         .eq('id', authData.user.id)
 
-      // Set cookie for middleware
+      // Set cookie for middleware, then full page reload
       document.cookie = 'sb-auth-status=1; path=/; max-age=31536000; SameSite=Lax'
-
-      // Full page reload to re-initialize layout auth state cleanly
       window.location.href = '/m'
-      return
     } catch {
       setError('登録に失敗しました')
       setStep('credentials')

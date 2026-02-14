@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, type FormEvent } from 'react'
+import { useState, type FormEvent } from 'react'
 import Link from 'next/link'
 import { supabase } from '@/lib/supabase'
 
@@ -15,17 +15,15 @@ export default function LoginPage() {
   const [error, setError] = useState<string | null>(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
 
-  // Clear any stale session to release Supabase internal auth lock
-  useEffect(() => {
-    void supabase.auth.signOut()
-  }, [])
-
   async function handleSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault()
     setError(null)
     setIsSubmitting(true)
 
     try {
+      // Clear any stale session first (awaited to ensure lock is released)
+      await supabase.auth.signOut()
+
       const { error: authError } = await supabase.auth.signInWithPassword({
         email,
         password,
@@ -40,12 +38,9 @@ export default function LoginPage() {
         return
       }
 
-      // Set cookie for middleware
+      // Set cookie for middleware, then full page reload
       document.cookie = 'sb-auth-status=1; path=/; max-age=31536000; SameSite=Lax'
-
-      // Full page reload to re-initialize layout auth state cleanly
       window.location.href = '/m'
-      return
     } catch {
       setError('ログインに失敗しました')
     } finally {

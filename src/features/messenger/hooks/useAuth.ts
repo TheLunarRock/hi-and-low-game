@@ -73,9 +73,9 @@ export function useAuth(): UseAuthReturn {
           if (isMounted) {
             setUser(profile ?? null)
           }
-        } else {
-          setAuthCookie(false)
         }
+        // Cookie is only cleared by explicit logout handler.
+        // Clearing here races with login page setting the cookie.
       } catch {
         // Session check failed silently
       } finally {
