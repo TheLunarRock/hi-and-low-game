@@ -34,14 +34,14 @@ export function useAuth(): UseAuthReturn {
     async function checkSession() {
       try {
         const {
-          data: { user: authUser },
-        } = await supabase.auth.getUser()
+          data: { session },
+        } = await supabase.auth.getSession()
 
-        if (authUser !== null && isMounted) {
+        if (session?.user != null && isMounted) {
           const { data: profile } = await supabase
             .from('profiles')
             .select('*')
-            .eq('id', authUser.id)
+            .eq('id', session.user.id)
             .single()
 
           // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- isMounted can change across await
@@ -59,6 +59,11 @@ export function useAuth(): UseAuthReturn {
     }
 
     void checkSession()
+
+    // Safety timeout: ensure isLoading becomes false even if session check hangs
+    const timeout = setTimeout(() => {
+      if (isMounted) setIsLoading(false)
+    }, 5000)
 
     // Listen for auth changes
     const {
@@ -89,6 +94,7 @@ export function useAuth(): UseAuthReturn {
 
     return () => {
       isMounted = false
+      clearTimeout(timeout)
       subscription.unsubscribe()
     }
   }, [])
