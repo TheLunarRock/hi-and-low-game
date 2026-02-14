@@ -36,6 +36,16 @@ function hasStoredSession(): boolean {
   }
 }
 
+/** Set a lightweight cookie flag so middleware can check auth without JS */
+function setAuthCookie(authenticated: boolean): void {
+  if (typeof document === 'undefined') return
+  if (authenticated) {
+    document.cookie = 'sb-auth-status=1; path=/; max-age=31536000; SameSite=Lax'
+  } else {
+    document.cookie = 'sb-auth-status=; path=/; max-age=0'
+  }
+}
+
 export function useAuth(): UseAuthReturn {
   const [user, setUser] = useState<Profile | null>(null)
   const [isLoading, setIsLoading] = useState(hasStoredSession)
@@ -52,6 +62,7 @@ export function useAuth(): UseAuthReturn {
         } = await supabase.auth.getSession()
 
         if (session?.user != null && isMounted) {
+          setAuthCookie(true)
           const { data: profile } = await supabase
             .from('profiles')
             .select('*')
@@ -62,6 +73,8 @@ export function useAuth(): UseAuthReturn {
           if (isMounted) {
             setUser(profile ?? null)
           }
+        } else {
+          setAuthCookie(false)
         }
       } catch {
         // Session check failed silently
@@ -86,6 +99,7 @@ export function useAuth(): UseAuthReturn {
       if (!isMounted) return
 
       if (event === 'SIGNED_IN' && session?.user !== undefined) {
+        setAuthCookie(true)
         const { data: profile } = await supabase
           .from('profiles')
           .select('*')
@@ -98,6 +112,7 @@ export function useAuth(): UseAuthReturn {
           setIsLoading(false)
         }
       } else if (event === 'SIGNED_OUT') {
+        setAuthCookie(false)
         // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- isMounted can change across await
         if (isMounted) {
           setUser(null)
