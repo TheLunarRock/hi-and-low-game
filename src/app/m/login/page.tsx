@@ -7,19 +7,23 @@ import { useAuthContext } from '@/features/messenger'
 
 export default function LoginPage() {
   const router = useRouter()
-  const { login, error, clearError, isLoading } = useAuthContext()
+  const { login, error, clearError } = useAuthContext()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
+  const [isSubmitting, setIsSubmitting] = useState(false)
 
   async function handleSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault()
     clearError()
+    setIsSubmitting(true)
 
     try {
       await login(email, password)
       router.push('/m')
     } catch {
       // Error is handled by useAuth
+    } finally {
+      setIsSubmitting(false)
     }
   }
 
@@ -75,10 +79,10 @@ export default function LoginPage() {
 
           <button
             type="submit"
-            disabled={isLoading}
+            disabled={isSubmitting}
             className="w-full rounded-lg bg-blue-500 py-3 font-bold text-white transition-colors hover:bg-blue-600 disabled:cursor-not-allowed disabled:opacity-50"
           >
-            {isLoading ? 'ログイン中...' : 'ログイン'}
+            {isSubmitting ? 'ログイン中...' : 'ログイン'}
           </button>
 
           <p className="mt-4 text-center text-sm text-gray-600">
