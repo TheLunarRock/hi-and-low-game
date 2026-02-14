@@ -1,18 +1,29 @@
 'use client'
 
-import { useState, type FormEvent } from 'react'
+import { useState, useEffect, type FormEvent } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { useAuthContext, AVATAR_COLORS } from '@/features/messenger'
+import { supabase } from '@/lib/supabase'
+import { AVATAR_COLORS } from '@/features/messenger'
 
+/**
+ * Signup page - completely independent from AuthContext.
+ * Uses Supabase client directly to avoid internal auth lock contention.
+ */
 export default function SignUpPage() {
   const router = useRouter()
-  const { signUp, error, clearError, isLoading } = useAuthContext()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [displayName, setDisplayName] = useState('')
   const [selectedColor, setSelectedColor] = useState<string>(AVATAR_COLORS[0])
   const [step, setStep] = useState<'credentials' | 'profile'>('credentials')
+  const [error, setError] = useState<string | null>(null)
+  const [isSubmitting, setIsSubmitting] = useState(false)
+
+  // Clear any stale session to release Supabase internal auth lock
+  useEffect(() => {
+    void supabase.auth.signOut()
+  }, [])
 
   function handleCredentials(e: FormEvent<HTMLFormElement>) {
     e.preventDefault()
@@ -21,14 +32,48 @@ export default function SignUpPage() {
 
   async function handleSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault()
-    clearError()
+    setError(null)
+    setIsSubmitting(true)
 
     try {
-      await signUp(email, password, displayName, selectedColor)
+      const { data: authData, error: authError } = await supabase.auth.signUp({
+        email,
+        password,
+        options: {
+          data: { display_name: displayName },
+        },
+      })
+
+      if (authError) {
+        setError(authError.message)
+        setStep('credentials')
+        return
+      }
+
+      if (authData.user === null) {
+        setError('登録に失敗しました')
+        setStep('credentials')
+        return
+      }
+
+      // Wait for trigger to create profile
+      await new Promise((resolve) => setTimeout(resolve, 1000))
+
+      // Update avatar color
+      await supabase
+        .from('profiles')
+        .update({ avatar_color: selectedColor })
+        .eq('id', authData.user.id)
+
+      // Set cookie for middleware
+      document.cookie = 'sb-auth-status=1; path=/; max-age=31536000; SameSite=Lax'
+
       router.push('/m')
     } catch {
-      // Error handled by useAuth
+      setError('登録に失敗しました')
       setStep('credentials')
+    } finally {
+      setIsSubmitting(false)
     }
   }
 
@@ -96,10 +141,10 @@ export default function SignUpPage() {
 
             <button
               type="submit"
-              disabled={isLoading || displayName.trim() === ''}
+              disabled={isSubmitting || displayName.trim() === ''}
               className="w-full rounded-lg bg-blue-500 py-3 font-bold text-white transition-colors hover:bg-blue-600 disabled:cursor-not-allowed disabled:opacity-50"
             >
-              {isLoading ? '登録中...' : '登録する'}
+              {isSubmitting ? '登録中...' : '登録する'}
             </button>
 
             <button

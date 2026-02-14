@@ -1,27 +1,53 @@
 'use client'
 
-import { useState, type FormEvent } from 'react'
+import { useState, useEffect, type FormEvent } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { useAuthContext } from '@/features/messenger'
+import { supabase } from '@/lib/supabase'
 
+/**
+ * Login page - completely independent from AuthContext.
+ * Uses Supabase client directly to avoid internal auth lock contention
+ * with the layout's session check.
+ */
 export default function LoginPage() {
   const router = useRouter()
-  const { login, error, clearError } = useAuthContext()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
+  const [error, setError] = useState<string | null>(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
+
+  // Clear any stale session to release Supabase internal auth lock
+  useEffect(() => {
+    void supabase.auth.signOut()
+  }, [])
 
   async function handleSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault()
-    clearError()
+    setError(null)
     setIsSubmitting(true)
 
     try {
-      await login(email, password)
+      const { error: authError } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      })
+
+      if (authError) {
+        setError(
+          authError.message === 'Invalid login credentials'
+            ? 'メールアドレスまたはパスワードが間違っています'
+            : authError.message
+        )
+        return
+      }
+
+      // Set cookie for middleware
+      document.cookie = 'sb-auth-status=1; path=/; max-age=31536000; SameSite=Lax'
+
       router.push('/m')
     } catch {
-      // Error is handled by useAuth
+      setError('ログインに失敗しました')
     } finally {
       setIsSubmitting(false)
     }
