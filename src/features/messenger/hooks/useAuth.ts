@@ -112,7 +112,8 @@ export function useAuth(): UseAuthReturn {
           setIsLoading(false)
         }
       } else if (event === 'SIGNED_OUT') {
-        setAuthCookie(false)
+        // Cookie is cleared explicitly by logout handler, not here.
+        // Clearing here causes race condition with login page's signOut() on mount.
         // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- isMounted can change across await
         if (isMounted) {
           setUser(null)

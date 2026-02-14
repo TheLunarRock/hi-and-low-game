@@ -2,7 +2,6 @@
 
 import { useState, useEffect, type FormEvent } from 'react'
 import Link from 'next/link'
-import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 
 /**
@@ -11,7 +10,6 @@ import { supabase } from '@/lib/supabase'
  * with the layout's session check.
  */
 export default function LoginPage() {
-  const router = useRouter()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState<string | null>(null)
@@ -45,7 +43,9 @@ export default function LoginPage() {
       // Set cookie for middleware
       document.cookie = 'sb-auth-status=1; path=/; max-age=31536000; SameSite=Lax'
 
-      router.push('/m')
+      // Full page reload to re-initialize layout auth state cleanly
+      window.location.href = '/m'
+      return
     } catch {
       setError('ログインに失敗しました')
     } finally {

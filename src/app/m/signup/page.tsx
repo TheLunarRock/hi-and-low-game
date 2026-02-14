@@ -2,7 +2,6 @@
 
 import { useState, useEffect, type FormEvent } from 'react'
 import Link from 'next/link'
-import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import { AVATAR_COLORS } from '@/features/messenger'
 
@@ -11,7 +10,6 @@ import { AVATAR_COLORS } from '@/features/messenger'
  * Uses Supabase client directly to avoid internal auth lock contention.
  */
 export default function SignUpPage() {
-  const router = useRouter()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [displayName, setDisplayName] = useState('')
@@ -68,7 +66,9 @@ export default function SignUpPage() {
       // Set cookie for middleware
       document.cookie = 'sb-auth-status=1; path=/; max-age=31536000; SameSite=Lax'
 
-      router.push('/m')
+      // Full page reload to re-initialize layout auth state cleanly
+      window.location.href = '/m'
+      return
     } catch {
       setError('登録に失敗しました')
       setStep('credentials')
