@@ -22,9 +22,23 @@ interface UseAuthReturn extends AuthState {
   clearError: () => void
 }
 
+/**
+ * Check localStorage synchronously for a Supabase session token.
+ * If no token exists, the user is definitely not authenticated
+ * and we can skip the loading spinner entirely.
+ */
+function hasStoredSession(): boolean {
+  if (typeof window === 'undefined') return true // SSR: assume loading
+  try {
+    return Object.keys(localStorage).some((k) => k.startsWith('sb-') && k.endsWith('-auth-token'))
+  } catch {
+    return true // If localStorage is blocked, assume loading
+  }
+}
+
 export function useAuth(): UseAuthReturn {
   const [user, setUser] = useState<Profile | null>(null)
-  const [isLoading, setIsLoading] = useState(true)
+  const [isLoading, setIsLoading] = useState(hasStoredSession)
   const [error, setError] = useState<string | null>(null)
 
   // Check current session on mount
@@ -63,7 +77,7 @@ export function useAuth(): UseAuthReturn {
     // Safety timeout: ensure isLoading becomes false even if session check hangs
     const timeout = setTimeout(() => {
       if (isMounted) setIsLoading(false)
-    }, 5000)
+    }, 3000)
 
     // Listen for auth changes
     const {
