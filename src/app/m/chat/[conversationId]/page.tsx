@@ -93,6 +93,27 @@ async function buildRealtimeMessage(
   }
 }
 
+function mergePolledMessages(
+  prev: MessageWithDetails[],
+  polled: MessageWithDetails[]
+): MessageWithDetails[] {
+  const existingIds = new Set(prev.map((m) => m.message.id))
+  const newMsgs = polled.filter((m) => !existingIds.has(m.message.id))
+  const hasUpdates = polled.some((p) => {
+    const existing = prev.find((m) => m.message.id === p.message.id)
+    return existing !== undefined && existing.message.is_deleted !== p.message.is_deleted
+  })
+  if (newMsgs.length === 0 && !hasUpdates) return prev
+  if (hasUpdates) {
+    const updated = prev.map((m) => {
+      const match = polled.find((d) => d.message.id === m.message.id)
+      return match ?? m
+    })
+    return [...updated, ...newMsgs]
+  }
+  return [...prev, ...newMsgs]
+}
+
 function applyMessageUpdate(
   messages: MessageWithDetails[],
   updated: RealtimeMessagePayload
@@ -329,6 +350,38 @@ export default function ChatPage() {
       void supabase.removeChannel(channel)
     }
   }, [conversationId, user])
+
+  // Polling fallback for iOS WebSocket drops + visibility change handler
+  useEffect(() => {
+    if (conversationId === '' || user === null || isLoading) return
+
+    const cid = conversationId
+    const uid = user.id
+
+    async function poll() {
+      try {
+        const data = await getMessages(cid)
+        setMessages((prev) => mergePolledMessages(prev, data))
+        void markAsRead(cid, uid)
+      } catch {
+        // Silent fail
+      }
+    }
+
+    function onVisible() {
+      if (document.visibilityState === 'visible') void poll()
+    }
+
+    document.addEventListener('visibilitychange', onVisible)
+    const timer = setInterval(() => {
+      if (document.visibilityState === 'visible') void poll()
+    }, 3000)
+
+    return () => {
+      document.removeEventListener('visibilitychange', onVisible)
+      clearInterval(timer)
+    }
+  }, [conversationId, user, isLoading])
 
   // Load more messages (scroll up)
   const handleLoadMore = useCallback(() => {

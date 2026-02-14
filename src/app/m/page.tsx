@@ -80,6 +80,30 @@ export default function TalkListPage() {
     }
   }, [user, loadConversations])
 
+  // Polling fallback for iOS WebSocket drops + visibility change handler
+  useEffect(() => {
+    if (user === null) return
+
+    function handleVisibilityChange() {
+      if (document.visibilityState === 'visible') {
+        void loadConversations()
+      }
+    }
+
+    document.addEventListener('visibilitychange', handleVisibilityChange)
+
+    const pollInterval = setInterval(() => {
+      if (document.visibilityState === 'visible') {
+        void loadConversations()
+      }
+    }, 10000)
+
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange)
+      clearInterval(pollInterval)
+    }
+  }, [user, loadConversations])
+
   function handleConversationClick(conversationId: string) {
     router.push(`/m/chat/${conversationId}`)
   }

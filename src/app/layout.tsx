@@ -2,17 +2,17 @@ import type { Metadata, Viewport } from 'next'
 import '@/styles/globals.css'
 
 export const viewport: Viewport = {
-  themeColor: '#3B82F6',
+  themeColor: '#15803d',
 }
 
 export const metadata: Metadata = {
-  title: 'Feature App',
-  description: 'Feature-based development template',
+  title: 'Hi & Low',
+  description: 'Card game',
   manifest: '/manifest.json',
   appleWebApp: {
     capable: true,
     statusBarStyle: 'default',
-    title: 'Messenger',
+    title: 'Hi & Low',
   },
 }
 

@@ -1,11 +1,11 @@
 {
-  "name": "Hi & Low Messenger",
-  "short_name": "Messenger",
-  "description": "LINE-style messaging app",
-  "start_url": "/m",
+  "name": "Hi & Low",
+  "short_name": "Hi & Low",
+  "description": "Card game",
+  "start_url": "/",
   "display": "standalone",
   "background_color": "#ffffff",
-  "theme_color": "#3B82F6",
+  "theme_color": "#15803d",
   "orientation": "portrait",
   "icons": [
     {
